@@ -5,7 +5,8 @@
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  inets, crypto, public_key, ssl
                  ]},
   {mod, { bus_broker, []}},
   {env, []}

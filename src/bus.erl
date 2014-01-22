@@ -14,7 +14,7 @@
 
 -export([start_link/0]).
 
--export([subscribe/1, unsubscribe/1, publish/2, publish/3, ack/0]).
+-export([subscribe/1, unsubscribe/1, publish/2, publish/3]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -54,13 +54,12 @@ publish(Topic, Mesg, Options) ->
     ok = gen_server:call(?SERVER, {publish, Topic, Mesg, Options}).
 
 
-ack() -> erlang:display("ACK").
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
-init(Args) ->
+init(_Args) ->
     { ok, #state{ name = "Bob" } }.
 
 
