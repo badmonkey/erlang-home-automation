@@ -105,6 +105,7 @@ test_valid_name(S, Expect) ->
 
 test_create(S, Result) ->
     Topic = create(S),
+%    erlang:display( { S, "creates", Topic } ),
     case Topic of
         { Result, _ } -> ok;
         _             -> erlang:display( { "Create", S, "expected", Result, "got", Topic } )
@@ -139,6 +140,7 @@ test() ->
     test_valid_name("ab#", false),
     test_valid_name("ab#cd", false),
     
+    
     test_create("", bad_topic),
     
     test_create("/a/b/c", topic),
@@ -162,6 +164,8 @@ test() ->
     test_create("a/b/#", wildcard_topic),
     test_create("a/#/c", bad_topic),
     test_create("#", wildcard_topic),
+    test_create("/#", wildcard_topic),
+    
     
     test_match("a/b/c", "a/b/c", true),
     test_match("a/b/c", "a/b/d", false),
