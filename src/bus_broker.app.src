@@ -7,6 +7,6 @@
                   kernel,
                   stdlib
                  ]},
-  {mod, { bus_broker_app, []}},
+  {mod, { bus_broker, []}},
   {env, []}
  ]}.
