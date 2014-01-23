@@ -19,4 +19,4 @@
 
 
 -type all_topics_type() :: #bad_topic{} | #topic{} | #wildcard_topic{}.
-
+-type valid_topic_type() :: #topic{} | #wildcard_topic{}.

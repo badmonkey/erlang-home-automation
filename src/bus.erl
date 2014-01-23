@@ -4,6 +4,8 @@
 
 -define(SERVER, ?MODULE).
 
+-include("bus_topic.hrl").
+
 
 -record(state, { name }).
 
@@ -15,6 +17,8 @@
 -export([start_link/0]).
 
 -export([subscribe/1, unsubscribe/1, publish/2, publish/3]).
+
+
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -28,31 +32,45 @@
 %% ------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+	gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+
+	
+-spec subscribe( string() ) -> ok | { error, string() }.
+
+subscribe(TopicStr) ->
+	Topic = bus_topic:create(TopicStr),
+	case Topic of
+		#bad_topic{ reason = Reason }	-> { error, Reason };
+		_								-> gen_server:call(?SERVER, {subscribe, Topic})
+	end.
 
 
 
-subscribe(Topic) ->
-    ok = gen_server:call(?SERVER, {subscribe, Topic}),
-%    receive
-%        {?MODULE, subscribe_reply, _} -> ok
-%    end.
-    ok.
+-spec unsubscribe( string() ) -> ok | { error, string() }.
+
+unsubscribe(TopicStr) ->
+	Topic = bus_topic:create(TopicStr),
+	case Topic of
+		#bad_topic{ reason = Reason }	-> { error, Reason };
+		_								-> gen_server:call(?SERVER, {unsubscribe, Topic})
+	end.
 
 
-unsubscribe(Topic) ->
-    ok = gen_server:call(?SERVER, {unsubscribe, Topic}),
-%    receive
-%        {?MODULE, unsubscribe_reply, _} -> ok
-%    end.
-    ok.
 
+-spec publish( string() | #topic{}, any(), list() ) -> ok | { error, string() }.
 
 publish(Topic, Mesg) -> publish(Topic, Mesg, []).
 
-publish(Topic, Mesg, Options) ->
-    ok = gen_server:call(?SERVER, {publish, Topic, Mesg, Options}).
-
+publish( #topic{} = Topic, Mesg, Options ) ->
+	gen_server:call(?SERVER, {publish, Topic, Mesg, Options});
+	
+publish(TopicStr, Mesg, Options) ->
+	Topic = bus_topic:create(TopicStr),
+	case Topic of
+		#topic{}	-> publish(Topic, Mesg, Options);
+		_			-> { error, "Invalid topic" }
+	end.
 
 
 %% ------------------------------------------------------------------
@@ -60,25 +78,28 @@ publish(Topic, Mesg, Options) ->
 %% ------------------------------------------------------------------
 
 init(_Args) ->
-    { ok, #state{ name = "Bob" } }.
+	{ ok, #state{ name = "Bob" } }.
 
 
 
 handle_call(_Request, _From, State) ->
-    erlang:display( { _Request, _From, State } ),
-    {reply, ok, State}.
+	erlang:display( { _Request, _From, State } ),
+	{ reply, ok, State }.
+
 
 handle_cast(_Msg, State) ->
-    {noreply, State}.
+	{noreply, State}.
+
 
 handle_info(_Info, State) ->
-    {noreply, State}.
+	{noreply, State}.
+
 
 terminate(_Reason, _State) ->
-    ok.
+	ok.
 
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+	{ok, State}.
 
 %% ------------------------------------------------------------------
 %% Internal Function Definitions

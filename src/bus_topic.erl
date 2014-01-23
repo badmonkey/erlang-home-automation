@@ -65,7 +65,6 @@ forward_topic_type(Parts, Topic) ->
     
 
 %%%%% public match/2 %%%%%
--type valid_topic_type() :: #topic{} | #wildcard_topic{}.
 -spec match( valid_topic_type(), valid_topic_type() ) -> boolean() | undefined.
 
 match( #topic{ parts = Parts }, #topic{ parts = Parts2 } ) ->
