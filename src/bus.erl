@@ -7,7 +7,10 @@
 -include("bus_topic.hrl").
 
 
--record(state, { name }).
+-record(state,
+	{
+		nodes :: dict()
+	} ).
 
 
 %% ------------------------------------------------------------------
@@ -78,12 +81,22 @@ publish(TopicStr, Mesg, Options) ->
 %% ------------------------------------------------------------------
 
 init(_Args) ->
-	{ ok, #state{ name = "Bob" } }.
+	{ ok, #state{
+			nodes = dict:new()
+		} }.
 
 
 
+handle_call( {subscribe, #topic{ parts = Topic } }, _From, State ) ->
+	erlang:display( { "Topic", Topic, _From, State } ),
+	{ reply, ok, State };
+
+handle_call( {subscribe, #wildcard_topic{ parts = Topic } }, _From, State ) ->
+	erlang:display( { "Wildcard", Topic, _From, State } ),
+	{ reply, ok, State };
+	
 handle_call(_Request, _From, State) ->
-	erlang:display( { _Request, _From, State } ),
+	erlang:display( { "Unknown", _Request, _From, State } ),
 	{ reply, ok, State }.
 
 
