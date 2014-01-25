@@ -165,6 +165,7 @@ test() ->
     test_create("#", wildcard_topic),
     test_create("/#", wildcard_topic),
     
+    %test_create( create("/a/b/c"), bad_topic),   % dialyzer will pick up this
     
     test_match("a/b/c", "a/b/c", true),
     test_match("a/b/c", "a/b/d", false),
