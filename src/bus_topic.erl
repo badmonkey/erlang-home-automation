@@ -2,7 +2,7 @@
 -module(bus_topic).
 -include("bus_topic.hrl").
 
--export([create/1, match/2, is_valid_name/1, test/0]).
+-export([create/1, create_from_list/1, match/2, is_valid_name/1, test/0]).
 
 
 %%%%% public is_valid_name/1 %%%%%
@@ -29,6 +29,21 @@ create( S ) ->
         _       -> implement_create(SplitList)
     end.
 
+    
+    
+%%%%% public create_from_list/1 %%%%%
+-spec create_from_list( list(string()) ) -> all_topics_type().
+
+create_from_list( L ) -> 
+    % handle empty strings and leading '/'
+    case L of
+        []      -> #bad_topic{ reason = "empty list passed as topic" };
+        [[]]    -> #bad_topic{ reason = "empty list passed as topic" };
+        [[]|T]  -> forward_topic_type( L, implement_create(T) );
+        _       -> implement_create(L)
+    end.
+
+
 
 implement_create( [] )        -> #topic{ parts = [] };
 implement_create( [[]] )      -> #bad_topic{ reason = "topic is incomplete (ends with a '/')" };
@@ -50,6 +65,7 @@ implement_create( [H|T] = Parts ) ->
         true  -> forward_topic_type(Parts, implement_create(T));
         _     -> #bad_topic{ reason = "invalid part name" }
     end.
+
 
 
 % forwards the topic type but uses Parts instead of Topic.parts
@@ -111,6 +127,15 @@ test_create(S, Result) ->
     end.
     
     
+test_create_list(L, Result) ->
+    Topic = create_from_list(L),
+%    erlang:display( { L, "creates", Topic } ),
+    case Topic of
+        { Result, _ } -> ok;
+        _             -> erlang:display( { "CreateList", L, "expected", Result, "got", Topic } )
+    end.
+    
+    
 test_match(S1, S2, ShouldMatch) ->
     Match = match( create(S1), create(S2) ),
     case Match of
@@ -141,6 +166,7 @@ test() ->
     
     
     test_create("", bad_topic),
+    test_create("/", bad_topic),
     
     test_create("/a/b/c", topic),
     test_create("a/b/c", topic),
@@ -166,6 +192,16 @@ test() ->
     test_create("/#", wildcard_topic),
     
     %test_create( create("/a/b/c"), bad_topic),   % dialyzer will pick up this
+    
+    test_create_list([], bad_topic),
+    test_create_list([[]], bad_topic),
+    
+    test_create_list(["a", "b"], topic),
+    test_create_list([[], "a", "b"], topic),
+    
+    test_create_list(["a", "#"], wildcard_topic),
+    test_create_list(["a", "#", "b"], bad_topic),
+    
     
     test_match("a/b/c", "a/b/c", true),
     test_match("a/b/c", "a/b/d", false),

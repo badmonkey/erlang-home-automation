@@ -84,6 +84,7 @@ unsubscribe(TopicStr, Options) ->
 
 -spec publish( string() | #topic{}, any(), proplists:proplist() ) -> ok | { error, string() }.
 % Options
+%   retain
 
 publish(Topic, Mesg) -> publish(Topic, Mesg, []).
 
@@ -105,7 +106,7 @@ publish( TopicStr, Mesg, Options ) ->
 init(_Args) ->
     random:seed( now() ),
     Secret = random:uniform( 1 bsl 32 ),
-    case gen_server:start_link(bus_node, {Secret}, []) of
+    case gen_server:start_link(bus_node, { [[]], Secret, false }, []) of
         { ok, Pid } ->  { ok,
                           #state{ secret = Secret, noderoot = Pid }
                         };
@@ -114,16 +115,39 @@ init(_Args) ->
 
 
 
-handle_call( {subscribe, #topic{ parts = Topic }, AddWho, Options }, _From, State ) ->
+handle_call( { subscribe, #topic{ parts = Topic }, AddWho, Options }, _From, State ) ->
     erlang:display( { "Topic", Topic, AddWho, _From, State } ),
     bus_node:observe(State#state.noderoot, State#state.secret, Topic, AddWho, proplists:get_value("send_hello", Options) ),
     { reply, ok, State };
 
     
-handle_call( {subscribe, #wildcard_topic{ parts = Topic }, AddWho, Options }, _From, State ) ->
+    
+handle_call( { subscribe, #wildcard_topic{ parts = Topic }, AddWho, Options }, _From, State ) ->
     erlang:display( { "Wildcard", Topic, AddWho, _From, State } ),
     bus_node:observe( State#state.noderoot, State#state.secret, Topic, AddWho, proplists:get_value("send_hello", Options) ),
     { reply, ok, State };
+    
+    
+    
+handle_call( { unsubscribe, #topic{ parts = Topic }, RemoveWho, Options }, _From, State ) ->
+    erlang:display( { "un- Topic", Topic, RemoveWho, _From, State } ),
+    bus_node:forget(State#state.noderoot, State#state.secret, Topic, RemoveWho, proplists:get_value("send_goodbye", Options) ),
+    { reply, ok, State };
+
+    
+    
+handle_call( { unsubscribe, #wildcard_topic{ parts = Topic }, RemoveWho, Options }, _From, State ) ->
+    erlang:display( { "un- Wildcard", Topic, RemoveWho, _From, State } ),
+    bus_node:forget( State#state.noderoot, State#state.secret, Topic, RemoveWho, proplists:get_value("send_goodbye", Options) ),
+    { reply, ok, State };    
+
+    
+    
+handle_call( { publish, #topic{ parts = Topic }, Mesg, Options }, _From, State ) ->
+    erlang:display( { "Publish", Topic, Mesg, _From, State } ),
+    bus_node:distribute(State#state.noderoot, State#state.secret, Topic, Mesg),
+    { reply, ok, State };
+    
 
 
 handle_call(_Request, _From, State) ->
