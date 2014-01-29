@@ -21,6 +21,7 @@
 -export([start_link/0]).
 
 -export([subscribe/1, subscribe/2, unsubscribe/1, unsubscribe/2, publish/2, publish/3]).
+-export([topic_everything/0, topic_system/1, topic_process/2, topic_private/1]).
 
 
 
@@ -97,7 +98,29 @@ publish( TopicStr, Mesg, Options ) ->
         #bad_topic{ reason = Reason }	-> { error, Reason };
         _   -> gen_server:call(?SERVER, { publish, Topic, Mesg, Options })
     end.
-	
+
+
+
+%%%%% public standard topics %%%%%
+
+-spec( topic_everything() -> #wildcard_topic{} ).
+topic_everything() -> #wildcard_topic{ parts = ["#"] }.
+
+
+%  /system/Section
+-spec( topic_system( string() ) -> #topic{} ).
+topic_system(Section) -> #topic{ parts = [[], "system", Section] }.
+
+
+% /process/Pid/Section
+-spec( topic_process( pid(), string() ) -> #topic{} ).
+topic_process(Pid, Section) -> #topic{ parts = [[], "process", io_lib:print(Pid), Section] }.
+
+
+% /process/Pid/private
+topic_private(Pid) -> #topic{ parts = [[], "process", io_lib:print(Pid), "private"] }.
+
+
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -145,7 +168,7 @@ handle_call( { unsubscribe, #wildcard_topic{ parts = Topic }, RemoveWho, Options
     
 handle_call( { publish, #topic{ parts = Topic }, Mesg, Options }, _From, State ) ->
     erlang:display( { "Publish", Topic, Mesg, _From, State } ),
-    bus_node:distribute(State#state.noderoot, State#state.secret, Topic, Mesg),
+    bus_node:distribute(State#state.noderoot, State#state.secret, Topic, Mesg, Options),
     { reply, ok, State };
     
 

@@ -9,12 +9,12 @@
 -spec is_valid_name( string() ) -> boolean().
 
 is_valid_name(ID) ->
-    case re:run(ID, "^[a-zA-Z0-9_ ,%$!@()=:;.?|\-]+$") of 
+    case re:run(ID, "^[a-zA-Z0-9_ ,%$!@<>()=:;.?|\-]+$") of 
         { match, _capture } -> true;
         _                   -> false
     end.
 
-    
+
     
 %%%%% public create/1 %%%%%
 -spec create( string() ) -> all_topics_type().
@@ -164,7 +164,6 @@ test() ->
     test_valid_name("ab#", false),
     test_valid_name("ab#cd", false),
     
-    
     test_create("", bad_topic),
     test_create("/", bad_topic),
     
@@ -193,6 +192,8 @@ test() ->
     
     %test_create( create("/a/b/c"), bad_topic),   % dialyzer will pick up this
     
+    test_create( lists:concat(["/process/", io_lib:print(self()), "/control"]), topic ),
+    
     test_create_list([], bad_topic),
     test_create_list([[]], bad_topic),
     
@@ -201,7 +202,6 @@ test() ->
     
     test_create_list(["a", "#"], wildcard_topic),
     test_create_list(["a", "#", "b"], bad_topic),
-    
     
     test_match("a/b/c", "a/b/c", true),
     test_match("a/b/c", "a/b/d", false),

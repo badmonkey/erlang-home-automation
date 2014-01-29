@@ -22,7 +22,7 @@
 
 -export([start_link/0]).
 
--export([observe/5, forget/5, distribute/4]).
+-export([observe/5, forget/5, distribute/5]).
 
 
 %% ------------------------------------------------------------------
@@ -74,8 +74,8 @@ forget(Node, Secret, Parts, ForgetWho, Goodbye) ->
 
 %%%%% public distribute/4 %%%%%
 
-distribute(Node, Secret, Parts, Mesg) ->
-    gen_server:cast( Node, { distribute, Secret, Parts, Parts, Mesg } ).
+distribute(Node, Secret, Parts, Mesg, Options) ->
+    gen_server:cast( Node, { distribute, Secret, Parts, Parts, Mesg, Options } ).
 
 
 %get_target(Secret, Topic) -> fun()
@@ -94,7 +94,8 @@ init( { Name, Secret, Wildcard } ) ->
           wildcard = Wildcard,
           children = dict:new(),
           listeners = sets:new()
-		} }.
+		}
+	}.
 
     
     
@@ -122,7 +123,7 @@ handle_cast( { observe, ReplyWho, Secret, Parts, AddWho, Hello }, State ) ->
                          
                 _     ->
                     ReplyWho ! { observe_reply, AddWho, true },
-                    % send Hello to AddWho
+                    send_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() ),
                     { noreply,
                       #state{
                           name      = State#state.name,
@@ -179,7 +180,7 @@ handle_cast( { forget, ReplyWho, Secret, Parts, ForgetWho, Goodbye }, State ) ->
             case sets:is_element(ForgetWho, State#state.listeners) of
                 true  -> 
                     ReplyWho ! { forget_reply, ForgetWho, true },
-                    % send Goodbye to AddWho
+                    send_message( ForgetWho, bus:topic_private(ForgetWho), Goodbye, bus:topic_everything() ),
                     { noreply,
                       #state{
                           name      = State#state.name,
@@ -210,7 +211,7 @@ handle_cast( { forget, ReplyWho, Secret, Parts, ForgetWho, Goodbye }, State ) ->
 
 %%%%% handle distribute %%%%%
 
-handle_cast( { distribute, Secret, Parts, FullParts, Mesg }, State) ->
+handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 
     case Secret =/= State#state.secret of
         true  -> throw( {error, "Inconsistent trie (passed wrong secret)"} );
@@ -219,19 +220,21 @@ handle_cast( { distribute, Secret, Parts, FullParts, Mesg }, State) ->
     erlang:display( {"Visiting", State#state.name, self(), Mesg} ),
     case Parts of
         []    ->
-            erlang:display( {"Endpoint", bus_topic:create_from_list(FullParts), bus_topic:create_from_list(tl(State#state.name)), Mesg} ),
-            % send mesg to listeners
+			% process options
+			Topic = bus_topic:create_from_list(FullParts),
+			ListenTopic = bus_topic:create_from_list(tl(State#state.name)),
+            send_message( self(), Topic, Mesg, ListenTopic ),
             { noreply, State };
 
             
         [H|T] ->
             case State#state.wildcard of
-                true  -> throw( {error, "Inconsistent trie (wildcard nodes cannot have children)"} );
+                true  -> throw( { error, "Inconsistent trie (wildcard nodes cannot have children)" } );
                 _     -> ok
             end,
-            spread_message(State, Secret, H, T, FullParts, Mesg),
-            spread_message(State, Secret, "+", T, FullParts, Mesg),
-            spread_message(State, Secret, "#", [], FullParts, Mesg),
+            spread_message(State, Secret, H, T, FullParts, Mesg, Options),
+            spread_message(State, Secret, "+", T, FullParts, Mesg, Options),
+            spread_message(State, Secret, "#", [], FullParts, Mesg, Options),
             { noreply, State }
     end;
 
@@ -257,8 +260,15 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 
 
-spread_message(State, Secret, X, Parts, FullParts, Mesg) ->
+spread_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
     case dict:find(X, State#state.children) of
-        { ok, [Node] }  -> gen_server:cast( Node, { distribute, Secret, Parts, FullParts, Mesg } );
+        { ok, [Node] }  -> gen_server:cast( Node, { distribute, Secret, Parts, FullParts, Mesg, Options } );
         _               -> ok
     end.
+    
+ 
+-spec( send_message( pid(), #topic{}, any(), valid_topic_type() ) -> ok ).
+send_message(Pid, Topic, Mesg, Listen) ->
+	erlang:display( {"Endpoint", Pid, Topic, Mesg, Listen} ),
+	ok.
+	
