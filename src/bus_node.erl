@@ -123,7 +123,7 @@ handle_cast( { observe, ReplyWho, Secret, Parts, AddWho, Hello }, State ) ->
                          
                 _     ->
                     ReplyWho ! { observe_reply, AddWho, true },
-                    send_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() ),
+                    deliver_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() ),
                     { noreply,
                       #state{
                           name      = State#state.name,
@@ -180,7 +180,7 @@ handle_cast( { forget, ReplyWho, Secret, Parts, ForgetWho, Goodbye }, State ) ->
             case sets:is_element(ForgetWho, State#state.listeners) of
                 true  -> 
                     ReplyWho ! { forget_reply, ForgetWho, true },
-                    send_message( ForgetWho, bus:topic_private(ForgetWho), Goodbye, bus:topic_everything() ),
+                    deliver_message( ForgetWho, bus:topic_private(ForgetWho), Goodbye, bus:topic_everything() ),
                     { noreply,
                       #state{
                           name      = State#state.name,
@@ -223,7 +223,7 @@ handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 			% process options
 			Topic = bus_topic:create_from_list(FullParts),
 			ListenTopic = bus_topic:create_from_list(tl(State#state.name)),
-            send_message( self(), Topic, Mesg, ListenTopic ),
+            deliver_message( self(), Topic, Mesg, ListenTopic ),
             { noreply, State };
 
             
@@ -245,9 +245,9 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
     
-    
 handle_info(_Info, State) ->
     {noreply, State}.
+
 
 terminate(_Reason, _State) ->
     ok.
@@ -266,9 +266,12 @@ spread_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
         _               -> ok
     end.
     
- 
--spec( send_message( pid(), #topic{}, any(), valid_topic_type() ) -> ok ).
-send_message(Pid, Topic, Mesg, Listen) ->
+
+
+-spec( deliver_message( pid(), #topic{}, any(), valid_topic_type() ) -> ok ).
+
+deliver_message(Pid, Topic, Mesg, Listen) ->
 	erlang:display( {"Endpoint", Pid, Topic, Mesg, Listen} ),
+	%Pid ! {},
 	ok.
 	

@@ -2,7 +2,7 @@
 -module(bus_topic).
 -include("bus_topic.hrl").
 
--export([create/1, create_from_list/1, match/2, is_valid_name/1, test/0]).
+-export([create/1, create_from_list/1, match/2, is_valid_name/1, to_string/1, test/0]).
 
 
 %%%%% public is_valid_name/1 %%%%%
@@ -108,6 +108,17 @@ implement_match( _, _ )               -> false.
 
 
 
+%%%%% to_string/1 %%%%%
+-spec to_string( valid_topic_type() ) -> string().
+
+to_string( #topic{ parts = Parts } ) ->
+	string:join( Parts, "/" );
+
+to_string( #wildcard_topic{ parts = Parts } ) ->
+	string:join( Parts, "/" ).
+
+
+
 %%%%% Unit Tests %%%%%
 
 test_valid_name(S, Expect) ->
@@ -143,6 +154,15 @@ test_match(S1, S2, ShouldMatch) ->
         _           -> erlang:display( { "Match?", S1, S2, "expected", ShouldMatch, "got", Match } )
     end.
     
+    
+test_to_string(S) ->
+	Topic = create(S),
+	Result = to_string(Topic),
+	case Result of
+		S	-> ok;
+		_	-> erlang:display( { "to_string", S, "got", Result } )
+	end.
+	
 
 %%%%% public test/0 %%%%%
 
@@ -193,6 +213,10 @@ test() ->
     %test_create( create("/a/b/c"), bad_topic),   % dialyzer will pick up this
     
     test_create( lists:concat(["/process/", io_lib:print(self()), "/control"]), topic ),
+    
+    test_to_string("a/b/c"),
+    test_to_string("/a"),
+    test_to_string("a/+/c"),
     
     test_create_list([], bad_topic),
     test_create_list([[]], bad_topic),

@@ -85,7 +85,7 @@ unsubscribe(TopicStr, Options) ->
 
 -spec publish( string() | #topic{}, any(), proplists:proplist() ) -> ok | { error, string() }.
 % Options
-%   retain
+%   { retain }
 
 publish(Topic, Mesg) -> publish(Topic, Mesg, []).
 
@@ -99,7 +99,7 @@ publish( TopicStr, Mesg, Options ) ->
         _   -> gen_server:call(?SERVER, { publish, Topic, Mesg, Options })
     end.
 
-
+    
 
 %%%%% public standard topics %%%%%
 
@@ -183,6 +183,7 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(_Info, State) ->
+	erlang:display( { "handle_info", _Info } ),
     {noreply, State}.
 
 
