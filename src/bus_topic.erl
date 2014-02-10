@@ -10,8 +10,8 @@
 
 is_valid_name(ID) ->
     case re:run(ID, "^[a-zA-Z0-9_ ,%$!@<>()=:;.?|\-]+$") of 
-        { match, _capture } -> true;
-        _                   -> false
+        { match, _capture } -> true
+	;	_                   -> false
     end.
 
 
@@ -24,9 +24,9 @@ create( S ) ->
     
       % handle empty strings and leading '/'
     case SplitList of
-        [[]]    -> #bad_topic{ reason = "empty string passed as topic" };
-        [[]|T]  -> forward_topic_type( SplitList, implement_create(T) );
-        _       -> implement_create(SplitList)
+        [[]]    -> #bad_topic{ reason = "empty string passed as topic" }
+	;	[[]|T]  -> forward_topic_type( SplitList, implement_create(T) )
+	;	_       -> implement_create(SplitList)
     end.
 
     
@@ -37,10 +37,10 @@ create( S ) ->
 create_from_list( L ) -> 
     % handle empty strings and leading '/'
     case L of
-        []      -> #bad_topic{ reason = "empty list passed as topic" };
-        [[]]    -> #bad_topic{ reason = "empty list passed as topic" };
-        [[]|T]  -> forward_topic_type( L, implement_create(T) );
-        _       -> implement_create(L)
+        []      -> #bad_topic{ reason = "empty list passed as topic" }
+	;	[[]]    -> #bad_topic{ reason = "empty list passed as topic" }
+	;	[[]|T]  -> forward_topic_type( L, implement_create(T) )
+	;	_       -> implement_create(L)
     end.
 
 
@@ -53,17 +53,17 @@ implement_create( ["#"|_T] )  -> #bad_topic{ reason = "hash in middle of topic" 
 implement_create( ["+"|T] = Parts ) -> 
     TailTopic = implement_create(T),
     case TailTopic of
-        #topic{}              -> #wildcard_topic{ parts = Parts };
-        #wildcard_topic{}     -> #wildcard_topic{ parts = Parts };
-        _                     -> TailTopic
+        #topic{}              -> #wildcard_topic{ parts = Parts }
+	;	#wildcard_topic{}     -> #wildcard_topic{ parts = Parts }
+	;	_                     -> TailTopic
     end;
 
 implement_create( [[]|_T] )   -> #bad_topic{ reason = "empty part name (using '//' in topic)" };
 
 implement_create( [H|T] = Parts ) ->
     case is_valid_name(H) of
-        true  -> forward_topic_type(Parts, implement_create(T));
-        _     -> #bad_topic{ reason = "invalid part name" }
+        true  -> forward_topic_type(Parts, implement_create(T))
+	;	_     -> #bad_topic{ reason = "invalid part name" }
     end.
 
 
@@ -73,9 +73,9 @@ implement_create( [H|T] = Parts ) ->
 
 forward_topic_type(Parts, Topic) ->
     case Topic of
-        #topic{}          -> #topic{ parts = Parts };
-        #wildcard_topic{} -> #wildcard_topic{ parts = Parts };
-        _                 -> Topic
+        #topic{}          -> #topic{ parts = Parts }
+	;	#wildcard_topic{} -> #wildcard_topic{ parts = Parts }
+	;	_                 -> Topic
     end.
 
     
@@ -124,8 +124,8 @@ to_string( #wildcard_topic{ parts = Parts } ) ->
 test_valid_name(S, Expect) ->
     Valid = is_valid_name(S),
     case Valid of
-        Expect  -> ok;
-        _       -> erlang:display( { "Valid?", S, "expected", Expect, "got", Valid } )
+        Expect  -> ok
+	;	_       -> erlang:display( { "Valid?", S, "expected", Expect, "got", Valid } )
     end.
     
 
@@ -133,8 +133,8 @@ test_create(S, Result) ->
     Topic = create(S),
 %    erlang:display( { S, "creates", Topic } ),
     case Topic of
-        { Result, _ } -> ok;
-        _             -> erlang:display( { "Create", S, "expected", Result, "got", Topic } )
+        { Result, _ } -> ok
+	;	_             -> erlang:display( { "Create", S, "expected", Result, "got", Topic } )
     end.
     
     
@@ -142,16 +142,16 @@ test_create_list(L, Result) ->
     Topic = create_from_list(L),
 %    erlang:display( { L, "creates", Topic } ),
     case Topic of
-        { Result, _ } -> ok;
-        _             -> erlang:display( { "CreateList", L, "expected", Result, "got", Topic } )
+        { Result, _ } -> ok
+	;	_             -> erlang:display( { "CreateList", L, "expected", Result, "got", Topic } )
     end.
     
     
 test_match(S1, S2, ShouldMatch) ->
     Match = match( create(S1), create(S2) ),
     case Match of
-        ShouldMatch -> ok;
-        _           -> erlang:display( { "Match?", S1, S2, "expected", ShouldMatch, "got", Match } )
+        ShouldMatch -> ok
+	;	_           -> erlang:display( { "Match?", S1, S2, "expected", ShouldMatch, "got", Match } )
     end.
     
     
@@ -159,8 +159,8 @@ test_to_string(S) ->
 	Topic = create(S),
 	Result = to_string(Topic),
 	case Result of
-		S	-> ok;
-		_	-> erlang:display( { "to_string", S, "got", Result } )
+		S	-> ok
+	;	_	-> erlang:display( { "to_string", S, "got", Result } )
 	end.
 	
 
@@ -210,7 +210,8 @@ test() ->
     test_create("#", wildcard_topic),
     test_create("/#", wildcard_topic),
     
-    %test_create( create("/a/b/c"), bad_topic),   % dialyzer will pick up this
+    %test_create( 100, bad_topic),   			% dialyzer will pick up this
+    %test_create( create("/a/b/c"), bad_topic),	% dialyzer will pick up this
     
     test_create( lists:concat(["/process/", io_lib:print(self()), "/control"]), topic ),
     

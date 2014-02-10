@@ -50,8 +50,8 @@ observe(Node, Secret, Parts, AddWho, Hello) ->
     receive
         { observe_reply, AddedWho, Added }  ->
             case AddedWho =/= AddWho of
-                true  -> { error, "mismatch: pid returned is not the pid requested" };
-                _     -> erlang:display( {"Added", AddedWho, Added} ), Added
+                true  -> { error, "mismatch: pid returned is not the pid requested" }
+			;	_     -> erlang:display( {"Added", AddedWho, Added} ), Added
             end
     end.
 
@@ -65,8 +65,8 @@ forget(Node, Secret, Parts, ForgetWho, Goodbye) ->
     receive
         { forget_reply, ForgottenWho, Removed }  ->
             case ForgottenWho =/= ForgetWho of
-                true  -> { error, "mismatch: pid returned is not the pid requested" };
-                _     -> erlang:display( {"Forgotten", ForgottenWho, Removed} ), Removed
+                true  -> { error, "mismatch: pid returned is not the pid requested" }
+			;	_     -> erlang:display( {"Forgotten", ForgottenWho, Removed} ), Removed
             end
     end.
 
@@ -110,8 +110,8 @@ handle_call(_Request, _From, State) ->
 handle_cast( { observe, ReplyWho, Secret, Parts, AddWho, Hello }, State ) ->
     
     case Secret =/= State#state.secret of
-        true  -> throw( {error, "Inconsistent trie (passed wrong secret)"} );
-        _     -> ok
+        true  -> throw( {error, "Inconsistent trie (passed wrong secret)"} )
+	;	_     -> ok
     end,
     
     case Parts of
@@ -119,9 +119,9 @@ handle_cast( { observe, ReplyWho, Secret, Parts, AddWho, Hello }, State ) ->
             case sets:is_element(AddWho, State#state.listeners) of
                 true  -> 
                     ReplyWho ! { observe_reply, AddWho, false },
-                    { noreply, State };
+                    { noreply, State }
                          
-                _     ->
+			;	_     ->
                     ReplyWho ! { observe_reply, AddWho, true },
                     deliver_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() ),
                     { noreply,
@@ -136,16 +136,16 @@ handle_cast( { observe, ReplyWho, Secret, Parts, AddWho, Hello }, State ) ->
             
         [H|T] ->
             case State#state.wildcard of
-                true  -> throw( {error, "Inconsistent trie (wildcard nodes cannot have children)"} );
-                _     -> ok
+                true  -> throw( {error, "Inconsistent trie (wildcard nodes cannot have children)"} )
+			;	_     -> ok
             end,
             
             case dict:find(H, State#state.children) of
                 { ok, [Node] }  ->
                     gen_server:cast( Node, { observe, ReplyWho, Secret, T, AddWho, Hello } ),
-                    { noreply, State };
+                    { noreply, State }
                           
-                _             ->
+			;	_             ->
                     case gen_server:start_link(bus_node, { State#state.name ++ [H], State#state.secret, H =:= "#" }, []) of
                         { ok, NewNode } ->  
                             gen_server:cast( NewNode, { observe, ReplyWho, Secret, T, AddWho, Hello } ),
@@ -156,9 +156,9 @@ handle_cast( { observe, ReplyWho, Secret, Parts, AddWho, Hello }, State ) ->
                                   listeners = State#state.listeners,
                                   children  = dict:append(H, NewNode, State#state.children)
                               }
-                            };
+                            }
                             
-                        Other       -> 
+					;	Other       -> 
                             { error, Other }
                     end
             end
@@ -188,9 +188,9 @@ handle_cast( { forget, ReplyWho, Secret, Parts, ForgetWho, Goodbye }, State ) ->
                           children  = State#state.children,
                           listeners = sets:del_element(ForgetWho, State#state.listeners)
                       }
-                    };
+                    }
                          
-                _     ->
+			;	_     ->
                     ReplyWho ! { forget_reply, ForgetWho, false },
                     { noreply, State }
             end;
@@ -199,9 +199,9 @@ handle_cast( { forget, ReplyWho, Secret, Parts, ForgetWho, Goodbye }, State ) ->
             case dict:find(H, State#state.children) of
                 { ok, [Node] }  ->
                     gen_server:cast( Node, { forget, ReplyWho, Secret, T, ForgetWho, Goodbye } ),
-                    { noreply, State };
+                    { noreply, State }
                           
-                _             ->
+			;	_             ->
                     ReplyWho ! { forget_reply, ForgetWho, { error, "Incomplete or bad topic specified" } },
                     { noreply, State }
             end        
@@ -214,8 +214,8 @@ handle_cast( { forget, ReplyWho, Secret, Parts, ForgetWho, Goodbye }, State ) ->
 handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 
     case Secret =/= State#state.secret of
-        true  -> throw( {error, "Inconsistent trie (passed wrong secret)"} );
-        _     -> ok
+        true  -> throw( {error, "Inconsistent trie (passed wrong secret)"} )
+	;	_     -> ok
     end,
     erlang:display( {"Visiting", State#state.name, self(), Mesg} ),
     case Parts of
@@ -224,13 +224,13 @@ handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 			Topic = bus_topic:create_from_list(FullParts),
 			ListenTopic = bus_topic:create_from_list(tl(State#state.name)),
             deliver_message( self(), Topic, Mesg, ListenTopic ),
-            { noreply, State };
+            { noreply, State }
 
             
-        [H|T] ->
+	;	[H|T] ->
             case State#state.wildcard of
-                true  -> throw( { error, "Inconsistent trie (wildcard nodes cannot have children)" } );
-                _     -> ok
+                true  -> throw( { error, "Inconsistent trie (wildcard nodes cannot have children)" } )
+			;	_     -> ok
             end,
             spread_message(State, Secret, H, T, FullParts, Mesg, Options),
             spread_message(State, Secret, "+", T, FullParts, Mesg, Options),
@@ -262,8 +262,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 spread_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
     case dict:find(X, State#state.children) of
-        { ok, [Node] }  -> gen_server:cast( Node, { distribute, Secret, Parts, FullParts, Mesg, Options } );
-        _               -> ok
+        { ok, [Node] }  -> gen_server:cast( Node, { distribute, Secret, Parts, FullParts, Mesg, Options } )
+	;	_               -> ok
     end.
     
 

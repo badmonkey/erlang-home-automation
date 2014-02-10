@@ -56,8 +56,8 @@ subscribe( #wildcard_topic{} = Topic, Options) ->
 subscribe(TopicStr, Options) ->
     Topic = bus_topic:create(TopicStr),
     case Topic of
-        #bad_topic{ reason = Reason }	-> { error, Reason };
-        _   -> gen_server:call(?SERVER, { subscribe, Topic, self(), Options })
+        #bad_topic{ reason = Reason }	-> { error, Reason }
+	;	_   -> gen_server:call(?SERVER, { subscribe, Topic, self(), Options })
     end.
     
 
@@ -77,8 +77,8 @@ unsubscribe( #wildcard_topic{} = Topic, Options) ->
 unsubscribe(TopicStr, Options) ->
     Topic = bus_topic:create(TopicStr),
     case Topic of
-        #bad_topic{ reason = Reason }	-> { error, Reason };
-        _   -> gen_server:call(?SERVER, {unsubscribe, Topic, self(), Options})
+        #bad_topic{ reason = Reason }	-> { error, Reason }
+	;	_   -> gen_server:call(?SERVER, {unsubscribe, Topic, self(), Options})
     end.
 
 
@@ -95,8 +95,8 @@ publish( #topic{} = Topic, Mesg, Options) ->
 publish( TopicStr, Mesg, Options ) ->
     Topic = bus_topic:create(TopicStr),
     case Topic of
-        #bad_topic{ reason = Reason }	-> { error, Reason };
-        _   -> gen_server:call(?SERVER, { publish, Topic, Mesg, Options })
+        #bad_topic{ reason = Reason }	-> { error, Reason }
+    ;	_   -> gen_server:call(?SERVER, { publish, Topic, Mesg, Options })
     end.
 
     
@@ -132,8 +132,8 @@ init(_Args) ->
     case gen_server:start_link(bus_node, { [[]], Secret, false }, []) of
         { ok, Pid } ->  { ok,
                           #state{ secret = Secret, noderoot = Pid }
-                        };
-        Other       -> Other
+                        }
+	;	Other       -> Other
     end.
 
 
