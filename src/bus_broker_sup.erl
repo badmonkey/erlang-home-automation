@@ -17,11 +17,11 @@
 %% ===================================================================
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+	supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 start_in_shell() ->
-    {ok, Pid} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    unlink(Pid).
+	{ok, Pid} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
+	unlink(Pid).
 
 
 %% ===================================================================
@@ -29,6 +29,6 @@ start_in_shell() ->
 %% ===================================================================
 
 init([]) ->
-    Bus = {bus, {bus, start_link, []}, permanent, brutal_kill, worker, [bus]},
-    {ok, { {one_for_one, 5, 10}, [Bus]} }.
+	Bus = {bus, {bus, start_link, []}, permanent, brutal_kill, worker, [bus]},
+	{ok, { {one_for_one, 5, 10}, [Bus]} }.
 

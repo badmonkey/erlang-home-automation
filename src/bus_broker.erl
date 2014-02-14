@@ -19,7 +19,7 @@ stop() -> application:stop(?MODULE).
 
 
 start(_StartType, _StartArgs) ->
-    bus_broker_sup:start_link().
+	bus_broker_sup:start_link().
 
 stop(_State) ->
-    ok.
+	ok.
