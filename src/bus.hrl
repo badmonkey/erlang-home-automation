@@ -24,7 +24,4 @@
 
 -type bus_run_modes() :: mode_startup | mode_running .
 
--type node_action() :: fun( pid() ) -> any().
-%-> { ok, pid(), any() } | { error, any() }
-
 

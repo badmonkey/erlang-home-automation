@@ -18,13 +18,20 @@
 	} ).
 
 
+-type node_action() :: fun( ( #state{} ) -> { any(), #state{} } ).
+-type node_result_type() :: { ok, pid(), any() } | { notfound } | { error, any() }.
+
+
+
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
 
 -export([start_link/0]).
 
--export([start_node/4, find_node/3, observe/5, forget/5, distribute/5]).
+-export([start_node/4, start_node/5]).
+-export([get_name/1]).
+-export([observe/5, forget/5, distribute/5]).
 
 
 %% ------------------------------------------------------------------
@@ -44,86 +51,101 @@ start_link() ->
 
 
 
-%%%%% public create_node/4 %%%%%
--spec start_node( list( string() ), integer(), boolean(), bus_run_modes() ) -> { ok, pid() } | { error, any() }.
+%%%%%%%%%% public create_node/4,5 %%%%%%%%%%
+-spec start_node( list( string() ), integer(), boolean(), bus_run_modes(), node_action() ) -> { ok, pid() } | { error, any() }.
+
+noop_action(S) -> { true, S }.
 
 start_node(Name, Secret, Wildcard, Mode) ->
-	gen_server:start_link(bus_node, { Name, Secret, Wildcard, Mode }, []).
+	start_node(Name, Secret, Wildcard, Mode, fun noop_action/1 ).
+	
+start_node(Name, Secret, Wildcard, Mode, CreateAction) ->
+	gen_server:start_link(bus_node, { Name, Secret, Wildcard, Mode, CreateAction }, []).
 
 
 
-%%%%% public find_node_then/4 %%%%%
--spec find_node_then( pid(), integer(), list( string() ), node_action() ) -> none().
+%%%%%%%%%% public getmake_then/5 %%%%%%%%%%
+-spec getmake_then( pid(), integer(), list( string() ), node_action(), node_action() ) -> node_result_type().
 
-find_node_then(Node, Secret, Parts, Action) ->
-	gen_server:cast( Node, { find_node_then, self(), Secret, Parts, Action } ),
+getmake_then(Node, Secret, Parts, FoundAction, CreateAction) ->
+	Token = random:uniform( 1 bsl 32 ),
+	gen_server:cast( Node, { getmake_then, self(), Secret, Parts, Token, FoundAction, CreateAction } ),
 	receive
-		{ find_reply, ReplyNode }  -> ReplyNode
+		{ getmake_reply, Token, Result }  -> Result
 
 	end.
+
+
+
+%%%%%%%%%% public findnode_then/4 %%%%%%%%%%
+-spec findnode_then( pid(), integer(), list( string() ), node_action() ) -> node_result_type().
+
+findnode_then(Node, Secret, Parts, FoundAction) ->
+	Token = random:uniform( 1 bsl 32 ),
+	gen_server:cast( Node, { findnode_then, self(), Secret, Parts, Token, FoundAction } ),
+	receive
+		{ findnode_reply, Token, Result }  -> Result
+
+	end.
+
+	
+
+%%%%%%%%%% public get_name/1 %%%%%%%%%%
+-spec get_name( pid() ) -> string().
+
+get_name(Node) ->
+	gen_server:call(Node, { call_get_name }).
 	
 
 
-%%%%% public find_node/3 %%%%%
--spec find_node( pid(), integer(), list( string() ) ) -> pid().
-
-find_node(Node, Secret, Parts) ->
-	gen_server:cast( Node, { find_node, self(), Secret, Parts } ),
-	receive
-		{ find_reply, ReplyNode }  -> ReplyNode
-
-	end.
-
-
-
-%%%%% public observe/5 %%%%%
+%%%%%%%%%% public observe/5 %%%%%%%%%%
 -spec observe( pid(), integer(), list( string() ), pid(), any() ) -> boolean() | { error, string() }.
 
 observe(Node, Secret, Parts, AddWho, Hello) ->
-	gen_server:cast( Node, { observe, self(), Secret, Parts, AddWho, Hello } ),
-	receive
-		{ observe_reply, AddedWho, Added }  ->
-			case AddedWho =/= AddWho of
-				true  -> { error, "mismatch: pid returned is not the pid requested" }
-			;	_     -> erlang:display( {"Added", AddedWho, Added} ), Added
-			end
+	case getmake_then(Node, Secret, Parts,
+				fun(AState) ->
+					Result = add_observer(AddWho, AState),
+					deliver_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() ),
+					Result
+				end,
+				fun noop_action/1 ) of
+		{ ok, _NodePid, DidAdd } 	-> DidAdd
+	;	{ error, Mesg }				-> { error, Mesg }
 	end.
-	
-	find_node_then(Node, Secret, Parts, 
 
 
 
-%%%%% public forget/5 %%%%%
+%%%%%%%%%% public forget/5 %%%%%%%%%%
 -spec forget( pid(), integer(), list( string() ), pid(), any() ) -> boolean() | { error, string() }.
 
 forget(Node, Secret, Parts, ForgetWho, Goodbye) ->
-	gen_server:cast( Node, { forget, self(), Secret, Parts, ForgetWho, Goodbye } ),
-	receive
-		{ forget_reply, ForgottenWho, Removed }  ->
-			case ForgottenWho =/= ForgetWho of
-				true  -> { error, "mismatch: pid returned is not the pid requested" }
-			;	_     -> erlang:display( {"Forgotten", ForgottenWho, Removed} ), Removed
-			end
+	case findnode_then(Node, Secret, Parts,
+				fun(AState) ->
+					Result = remove_observer(ForgetWho, AState),
+					deliver_message( ForgetWho, bus:topic_private(ForgetWho), Goodbye, bus:topic_everything() ),
+					Result
+				end) of
+		{ ok, _NodePid, DidDel } 	-> DidDel
+	;	{ notfound }				-> false
+	;	{ error, Mesg }				-> { error, Mesg }
 	end.
 
     
 
-%%%%% public distribute/4 %%%%%
+%%%%%%%%%% public distribute/4 %%%%%%%%%%
 
 distribute(Node, Secret, Parts, Mesg, Options) ->
 	gen_server:cast( Node, { distribute, Secret, Parts, Parts, Mesg, Options } ).
 
-
-%get_target(Secret, Topic) -> fun()
 
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
-init( { Name, Secret, Wildcard, Mode } ) ->
+init( { Name, Secret, Wildcard, Mode, CreateAction } ) ->
 	erlang:display( {"NewNode", Name, self()} ),
-	{ ok,
+	{ _Ignore, NewState } = CreateAction(
 		#state{
 			name = Name,
 			secret = Secret,
@@ -131,113 +153,102 @@ init( { Name, Secret, Wildcard, Mode } ) ->
 			wildcard = Wildcard,
 			children = dict:new(),
 			listeners = sets:new()
-		}
-	}.
+		}),
+	{ ok, NewState }.
 
+	
+
+%%%%%%%%%% handle call_get_name %%%%%%%%%%
+
+handle_call( { call_get_name }, _From, State) ->
+	{ reply, string:join( State#state.name, "/" ), State };
+	
     
-    
+	
+%%%%%%%%%% handle default call %%%%%%%%%%
+
 handle_call(_Request, _From, State) ->
 	erlang:display( {"Ignoring call", _Request, _From} ),
-	{reply, ok, State}.
+	{ reply, ok, State }.
 
+  
+  
+%%%%%%%%%% handle getmake_then %%%%%%%%%%
 
-
-%%%%% handle observe %%%%%
-
-handle_cast( { observe, ReplyWho, Secret, Parts, AddWho, Hello }, State ) ->
+handle_cast( { getmake_then, ReplyWho, Secret, Parts, Token, FoundAction, CreateAction }, State ) ->
 
 	case Secret =/= State#state.secret of
-		true  -> throw( {error, "Inconsistent trie (passed wrong secret)"} )
-	;	_     -> ok
+		true	-> throw( { error, "Inconsistent trie (passed wrong secret)" } )
+	;	_		-> ok
 	end,
 
 	case Parts of
 		[]    ->
-			case sets:is_element(AddWho, State#state.listeners) of
-				true  -> 
-					ReplyWho ! { observe_reply, AddWho, false },
-					{ noreply, State }
-							
-			;	_     ->
-					ReplyWho ! { observe_reply, AddWho, true },
-					deliver_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() ),
-					{ noreply,
-						State#state{
-							listeners = sets:add_element(AddWho, State#state.listeners)
-						}
-					}
-			end;
+			{ Result, NextState } = FoundAction(State),
+			ReplyWho ! { getmake_reply, Token, { ok, self(), Result } },
+			{ noreply, NextState }
 			
-		[H|T] ->
+	;	[H|T] ->
 			case State#state.wildcard of
-				true  -> throw( {error, "Inconsistent trie (wildcard nodes cannot have children)"} )
-			;	_     -> ok
+				true	-> throw( {error, "Inconsistent trie (wildcard nodes cannot have children)"} )
+			;	_		-> ok
 			end,
 			
 			case dict:find(H, State#state.children) of
-				{ ok, [Node] }  ->
-					gen_server:cast( Node, { observe, ReplyWho, Secret, T, AddWho, Hello } ),
+				{ ok, [Node] }	->
+					gen_server:cast( Node, { getmake_then, ReplyWho, Secret, T, Token, FoundAction, CreateAction } ),
 					{ noreply, State }
 							
-			;	_             ->
-					case start_node(State#state.name ++ [H], State#state.secret, H =:= "#", State#state.run_mode) of
-						{ ok, NewNode } ->  
-							gen_server:cast( NewNode, { observe, ReplyWho, Secret, T, AddWho, Hello } ),
+			;	_				->
+					case start_node(State#state.name ++ [H], State#state.secret, H =:= "#", State#state.run_mode, CreateAction) of
+						{ ok, NewNode }	->  
+							gen_server:cast( NewNode, { getmake_then, ReplyWho, Secret, T, Token, FoundAction, CreateAction } ),
 							{ noreply,
 								State#state{
 									children  = dict:append(H, NewNode, State#state.children)
 								}
 							}
 							
-					;	Other       -> 
-							{ error, Other }
+					;	Other			-> 
+							ReplyWho ! { getmake_reply, Token, { error, Other } },
+							{ noreply, State }
 					end
 			end
 	end;
-    
-    
+        
 
-%%%%% handle forget %%%%%
+		
+%%%%%%%%%% handle findnode_then %%%%%%%%%%
 
-handle_cast( { forget, ReplyWho, Secret, Parts, ForgetWho, Goodbye }, State ) ->
+handle_cast( { findnode_then, ReplyWho, Secret, Parts, Token, FoundAction }, State ) ->
 
 	case Secret =/= State#state.secret of
-		true  -> throw( {error, "Inconsistent trie (passed wrong secret)"} );
-		_     -> ok
+		true	-> throw( { error, "Inconsistent trie (passed wrong secret)" } )
+	;	_		-> ok
 	end,
 
 	case Parts of
-		[]    ->
-			case sets:is_element(ForgetWho, State#state.listeners) of
-				true  -> 
-					ReplyWho ! { forget_reply, ForgetWho, true },
-					deliver_message( ForgetWho, bus:topic_private(ForgetWho), Goodbye, bus:topic_everything() ),
-					{ noreply,
-						State#state{
-							listeners = sets:del_element(ForgetWho, State#state.listeners)
-						}
-					}
-							
-			;	_     ->
-					ReplyWho ! { forget_reply, ForgetWho, false },
-					{ noreply, State }
-			end;
+		[]		->
+			ActionWho = self(),
+			{ Result, NextState } = FoundAction( ActionWho, State ),
+			ReplyWho ! { findnode_reply, Token, { ok, ActionWho, Result } },
+			{ noreply, NextState }
 			
-		[H|T] ->
+	;	[H|T]	->
 			case dict:find(H, State#state.children) of
-				{ ok, [Node] }  ->
-					gen_server:cast( Node, { forget, ReplyWho, Secret, T, ForgetWho, Goodbye } ),
+				{ ok, [Node] }	->
+					gen_server:cast( Node, { findnode_reply, ReplyWho, Secret, T, Token, FoundAction } ),
 					{ noreply, State }
 							
-			;	_             ->
-					ReplyWho ! { forget_reply, ForgetWho, { error, "Incomplete or bad topic specified" } },
+			;	_				->
+					ReplyWho ! { findnode_reply, Token, { notfound } },
 					{ noreply, State }
 			end        
 	end;
+	
 
 
-
-%%%%% handle distribute %%%%%
+%%%%%%%%%% handle distribute %%%%%%%%%%
 
 handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 
@@ -268,6 +279,8 @@ handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 
 
 
+%%%%%%%%%% handle default cast %%%%%%%%%%
+
 handle_cast(_Msg, State) ->
 	erlang:display( {"Ignoring cast", _Msg} ),
 	{noreply, State}.
@@ -288,7 +301,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
 
-
+%%%%%%%%%% spread_message %%%%%%%%%%
 spread_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
 	case dict:find(X, State#state.children) of
 		{ ok, [Node] }  -> gen_server:cast( Node, { distribute, Secret, Parts, FullParts, Mesg, Options } )
@@ -297,7 +310,8 @@ spread_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
     
 
 
--spec( deliver_message( pid(), #topic{}, any(), valid_topic_type() ) -> ok ).
+%%%%%%%%%% deliver_message %%%%%%%%%%
+-spec deliver_message( pid(), #topic{}, any(), valid_topic_type() ) -> ok.
 
 deliver_message(Pid, Topic, Mesg, Listen) ->
 	erlang:display( {"Endpoint", Pid, Topic, Mesg, Listen} ),
@@ -305,3 +319,36 @@ deliver_message(Pid, Topic, Mesg, Listen) ->
 	ok.
 
 
+	
+%%%%%%%%%% add_observer %%%%%%%%%%
+
+add_observer(AddWho, State) ->
+	case sets:is_element(AddWho, State#state.listeners) of
+		true  -> 
+			{ false, State }
+					
+	;	_     ->
+			{ true,
+				State#state{
+					listeners = sets:add_element(AddWho, State#state.listeners)
+				}
+			}
+	end.
+	    
+
+		
+%%%%%%%%%% remove_observer %%%%%%%%%%
+
+remove_observer(ForgetWho, State) ->
+	case sets:is_element(ForgetWho, State#state.listeners) of
+		true  -> 
+			{ true,
+				State#state{
+					listeners = sets:del_element(ForgetWho, State#state.listeners)
+				}
+			}
+					
+	;	_     ->
+			{ false, State }
+	end.
+	
