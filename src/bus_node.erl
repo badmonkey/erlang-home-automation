@@ -1,5 +1,6 @@
 
 -module(bus_node).
+-include_lib("eunit/include/eunit.hrl").
 
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
@@ -40,6 +41,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 		terminate/2, code_change/3]).
+-export([eunit_catch/0]).
 
          
 %% ------------------------------------------------------------------
@@ -104,12 +106,16 @@ get_name(Node) ->
 observe(Node, Secret, Parts, AddWho, Hello) ->
 	case getmake_then(Node, Secret, Parts,
 				fun(AState) ->
-					Result = add_observer(AddWho, AState),
-					deliver_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() ),
-					Result
+					add_observer(AddWho, AState)
 				end,
 				fun noop_action/1 ) of
-		{ ok, _NodePid, DidAdd } 	-> DidAdd
+		{ ok, _NodePid, DidAdd } 	->
+			case DidAdd of
+				true	-> deliver_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() )
+			;	_		-> ok
+			end,
+			DidAdd
+
 	;	{ error, Mesg }				-> { error, Mesg }
 	end.
 
@@ -121,11 +127,15 @@ observe(Node, Secret, Parts, AddWho, Hello) ->
 forget(Node, Secret, Parts, ForgetWho, Goodbye) ->
 	case findnode_then(Node, Secret, Parts,
 				fun(AState) ->
-					Result = remove_observer(ForgetWho, AState),
-					deliver_message( ForgetWho, bus:topic_private(ForgetWho), Goodbye, bus:topic_everything() ),
-					Result
+					remove_observer(ForgetWho, AState)
 				end) of
-		{ ok, _NodePid, DidDel } 	-> DidDel
+		{ ok, _NodePid, DidDel } 	->
+			case DidDel of
+				true	-> deliver_message( ForgetWho, bus:topic_private(ForgetWho), Goodbye, bus:topic_everything() )
+			;	_		-> ok
+			end,
+			DidDel
+			
 	;	{ notfound }				-> false
 	;	{ error, Mesg }				-> { error, Mesg }
 	end.
@@ -217,7 +227,7 @@ handle_cast( { getmake_then, ReplyWho, Secret, Parts, Token, FoundAction, Create
 	end;
         
 
-		
+
 %%%%%%%%%% handle findnode_then %%%%%%%%%%
 
 handle_cast( { findnode_then, ReplyWho, Secret, Parts, Token, FoundAction }, State ) ->
@@ -351,4 +361,43 @@ remove_observer(ForgetWho, State) ->
 	;	_     ->
 			{ false, State }
 	end.
+
+
+
+%% ------------------------------------------------------------------
+%% EUnit Definitions
+%% ------------------------------------------------------------------
+
+eunit_catch() ->
+	?debugMsg("euint_catch started"),
+	receive
+		terminate	-> ?debugMsg("Terminating"), ok
+	;	_Ignore		-> ?debugMsg("Eating message"), eunit_catch()
+	end.
+
+
+create_tst_tree() ->
+	random:seed( now() ),
+	Secret = random:uniform( 1 bsl 32 ),
+	{ ok, Pid } = start_node( [[]], Secret, false, mode_startup ),
+	CatchPid = spawn(?SERVER, eunit_catch, []),
+	?debugMsg("create new test tree"),
+	{ Pid, Secret, CatchPid }.
+	
+
+
+basic_node_test_() ->
+	{setup,
+	 fun () -> create_tst_tree() end,
+	 fun( { Pid, Secret, CatchPid } ) ->
+		[?_assert( observe(Pid, Secret, ["test"], CatchPid, "Hello World") ),
+		 ?_assertNot( observe(Pid, Secret, ["test"], CatchPid, "Hello World") ),
+		 ?_assert( observe(Pid, Secret, ["test", "chan"], CatchPid, "Hello World") ),
+		 %?_assertThrow( {error, _S}, observe(Pid, Secret + 1, ["test"], CatchPid, "Hello World") ),
+		 
+		 ?_assert( ( CatchPid ! terminate ) =:= terminate )
+		]
+	 end
+	}.
+
 	

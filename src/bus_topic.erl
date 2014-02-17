@@ -1,11 +1,13 @@
 
 -module(bus_topic).
+-include_lib("eunit/include/eunit.hrl").
 -include("bus.hrl").
 
--export([create/1, create_from_list/1, match/2, is_valid_name/1, to_string/1, test/0]).
+-export([create/1, create_from_list/1, match/2, is_valid_name/1, to_string/1]).
 
 
-%%%%% public is_valid_name/1 %%%%%
+
+%%%%%%%%%% public is_valid_name/1 %%%%%%%%%%
 -spec is_valid_name( string() ) -> boolean().
 
 is_valid_name(ID) ->
@@ -16,7 +18,7 @@ is_valid_name(ID) ->
 
 
     
-%%%%% public create/1 %%%%%
+%%%%%%%%%% public create/1 %%%%%%%%%%
 -spec create( string() ) -> all_topics_type().
 
 create( S ) ->
@@ -31,7 +33,7 @@ create( S ) ->
 
     
     
-%%%%% public create_from_list/1 %%%%%
+%%%%%%%%%% public create_from_list/1 %%%%%%%%%%
 -spec create_from_list( list(string()) ) -> all_topics_type().
 
 create_from_list( L ) -> 
@@ -80,7 +82,7 @@ forward_topic_type(Parts, Topic) ->
 
     
 
-%%%%% public match/2 %%%%%
+%%%%%%%%%% public match/2 %%%%%%%%%%
 -spec match( valid_topic_type(), valid_topic_type() ) -> boolean() | undefined.
 
 match( #topic{ parts = Parts }, #topic{ parts = Parts2 } ) ->
@@ -108,7 +110,7 @@ implement_match( _, _ )               -> false.
 
 
 
-%%%%% to_string/1 %%%%%
+%%%%%%%%%% to_string/1 %%%%%%%%%%
 -spec to_string( valid_topic_type() ) -> string().
 
 to_string( #topic{ parts = Parts } ) ->
@@ -119,139 +121,119 @@ to_string( #wildcard_topic{ parts = Parts } ) ->
 
 
 
-%%%%% Unit Tests %%%%%
+%% ------------------------------------------------------------------
+%% EUnit Definitions
+%% ------------------------------------------------------------------
 
-test_valid_name(S, Expect) ->
-	Valid = is_valid_name(S),
-	case Valid of
-		Expect  -> ok
-	;	_       -> erlang:display( { "Valid?", S, "expected", Expect, "got", Valid } )
-	end.
-    
+valid_names_test_() ->
+	[?_assertNot( is_valid_name("") ),
 
-test_create(S, Result) ->
-	Topic = create(S),
-%    erlang:display( { S, "creates", Topic } ),
-	case Topic of
-		{ Result, _ } -> ok
-	;	_             -> erlang:display( { "Create", S, "expected", Result, "got", Topic } )
-	end.
-    
-    
-test_create_list(L, Result) ->
-	Topic = create_from_list(L),
-%    erlang:display( { L, "creates", Topic } ),
-	case Topic of
-		{ Result, _ } -> ok
-	;	_             -> erlang:display( { "CreateList", L, "expected", Result, "got", Topic } )
-	end.
-    
-    
-test_match(S1, S2, ShouldMatch) ->
-	Match = match( create(S1), create(S2) ),
-	case Match of
-		ShouldMatch -> ok
-	;	_           -> erlang:display( { "Match?", S1, S2, "expected", ShouldMatch, "got", Match } )
-	end.
-    
-    
-test_to_string(S) ->
-	Topic = create(S),
-	Result = to_string(Topic),
-	case Result of
-		S	-> ok
-	;	_	-> erlang:display( { "to_string", S, "got", Result } )
-	end.
+	 ?_assert( is_valid_name("abc123") ),
+	 ?_assert( is_valid_name("a b c") ),
+	
+	 ?_assert( is_valid_name(" ") ),
+	
+	 ?_assertNot( is_valid_name("abc'") ),
+	
+	 ?_assertNot( is_valid_name("+'") ),
+	 ?_assertNot( is_valid_name("abc+'") ),
+	 ?_assertNot( is_valid_name("ab+cd'") ),
+	
+	 ?_assertNot( is_valid_name("#'") ),
+	 ?_assertNot( is_valid_name("ab#'") ),
+	 ?_assertNot( is_valid_name("ab#cd'") )
+	].
+
+	
+	
+create_topics_test_() ->
+	[?_assertMatch( #bad_topic{}, create("") ),
+	 ?_assertMatch( #bad_topic{}, create("/") ),
+	
+	 ?_assertMatch( #topic{}, create("/a/b/c") ),
+	 ?_assertMatch( #topic{}, create("a/b/c") ),
+
+	 ?_assertMatch( #topic{}, create("a/b c") ),
+	 ?_assertMatch( #bad_topic{}, create("a/b+c") ),
+	 ?_assertMatch( #bad_topic{}, create("a/b#c") ),
+	 ?_assertMatch( #bad_topic{}, create("a/b+") ),
+	 ?_assertMatch( #bad_topic{}, create("a/b#") ),
+
+	 ?_assertMatch( #topic{}, create("a/b!c") ),
+	 ?_assertMatch( #bad_topic{}, create("a/b'c") ),
+
+	 ?_assertMatch( #bad_topic{}, create("a//b/c") ),
+	 ?_assertMatch( #bad_topic{}, create("a/b/c/") ),
+	 ?_assertMatch( #bad_topic{}, create("a/b/c//") ),
+
+	 ?_assertMatch( #wildcard_topic{}, create("a/+/c") ),
+	 ?_assertMatch( #wildcard_topic{}, create("a/+/+") ),
+	 ?_assertMatch( #wildcard_topic{}, create("a/b/#") ),
+	 ?_assertMatch( #bad_topic{}, create("a/#/c") ),
+	 ?_assertMatch( #wildcard_topic{}, create("#") ),
+	 ?_assertMatch( #wildcard_topic{}, create("/#") ),
+	 
+	 %dialyser burfs (correctly) at both these tests
+	 %?_assertMatch( #bad_topic{}, create(100) ),
+	 %?_assertMatch( #bad_topic{}, create( create("/a/b/c") ) ),
+	 
+	 ?_assertMatch( #topic{}, create( lists:concat(["/process/", io_lib:print(self()), "/control"]) ) )
+	].
+
+
+	
+create_from_list_test_() ->
+	[?_assertMatch( #bad_topic{}, create_from_list([]) ),
+	 ?_assertMatch( #bad_topic{}, create_from_list([[]]) ),
+	
+	 ?_assertMatch( #topic{}, create_from_list(["a", "b"]) ),
+	 ?_assertMatch( #topic{}, create_from_list([[], "a", "b"]) ),
+	  
+	 ?_assertMatch( #wildcard_topic{}, create_from_list(["a", "#"]) ),
+	 ?_assertMatch( #bad_topic{}, create_from_list(["a", "#", "b"]) )
+	].
+
+
+
+maketest_to_string(S) ->
+	?_assertEqual( to_string( create(S) ), S ).
+
+to_string_test_() ->
+	[maketest_to_string("a/b/c"),
+	 maketest_to_string("/a"),
+	 maketest_to_string("a/+/c")
+	].
 	
 
-%%%%% public test/0 %%%%%
 
-test() ->
-	test_valid_name("", false),
+maketest_match(S1, S2, Expected) ->
+	?_assertEqual( match( create(S1), create(S2) ), Expected ).
+	
+match_test_() ->
+	[maketest_match("a/b/c", "a/b/c", true),
+	 maketest_match("a/b/c", "a/b/d", false),
+	 maketest_match("a/b/c", "/a/b/c", false),
 
-	test_valid_name("abc123", true),
-	test_valid_name("a b c", true),
+	 maketest_match("a/b/c", "a/+/c", true),
+	 maketest_match("a/b/c", "a/b/+", true),
+	 maketest_match("a/+/c", "a/b/c", true),
+	 maketest_match("a/+/c", "a/+/+", undefined),
+	 maketest_match("a/b/c", "a/+/+", true),
+	 maketest_match("a/b/c/d", "a/+/+", false),
 
-	test_valid_name(" ", true),
+	 maketest_match("/a", "+/+", true),
+	 maketest_match("/a", "/+", true),
+	 maketest_match("/a", "+", false),
 
-	test_valid_name("abc'", false),
+	 maketest_match("a", "#", true),
+	 maketest_match("/a", "#", true),
+	 maketest_match("a", "/#", false),
+	 maketest_match("/a", "/#", true),
 
-	test_valid_name("+", false),
-	test_valid_name("abc+", false),
-	test_valid_name("ab+cd", false),
+	 maketest_match("a/b/c", "a/b/#", true),
+	 maketest_match("a/b", "a/b/#", true),
+	 maketest_match("a/b/c", "a/#", true),
+	 maketest_match("a/b/c", "a/+/#", true)
+	].
 
-	test_valid_name("#", false),
-	test_valid_name("ab#", false),
-	test_valid_name("ab#cd", false),
-
-	test_create("", bad_topic),
-	test_create("/", bad_topic),
-
-	test_create("/a/b/c", topic),
-	test_create("a/b/c", topic),
-
-	test_create("a/b c", topic),
-	test_create("a/b+c", bad_topic),
-	test_create("a/b#c", bad_topic),
-	test_create("a/b+", bad_topic),
-	test_create("a/b#", bad_topic),
-
-	test_create("a/b!c", topic),
-	test_create("a/b'c", bad_topic),
-
-	test_create("a//b/c", bad_topic),
-	test_create("a/b/c/", bad_topic),
-	test_create("a/b/c//", bad_topic),
-
-	test_create("a/+/c", wildcard_topic),
-	test_create("a/+/+", wildcard_topic),
-	test_create("a/b/#", wildcard_topic),
-	test_create("a/#/c", bad_topic),
-	test_create("#", wildcard_topic),
-	test_create("/#", wildcard_topic),
-
-	%test_create( 100, bad_topic),   			% dialyzer will pick up this
-	%test_create( create("/a/b/c"), bad_topic),	% dialyzer will pick up this
-
-	test_create( lists:concat(["/process/", io_lib:print(self()), "/control"]), topic ),
-
-	test_to_string("a/b/c"),
-	test_to_string("/a"),
-	test_to_string("a/+/c"),
-
-	test_create_list([], bad_topic),
-	test_create_list([[]], bad_topic),
-
-	test_create_list(["a", "b"], topic),
-	test_create_list([[], "a", "b"], topic),
-
-	test_create_list(["a", "#"], wildcard_topic),
-	test_create_list(["a", "#", "b"], bad_topic),
-
-	test_match("a/b/c", "a/b/c", true),
-	test_match("a/b/c", "a/b/d", false),
-	test_match("a/b/c", "/a/b/c", false),
-
-	test_match("a/b/c", "a/+/c", true),
-	test_match("a/b/c", "a/b/+", true),
-	test_match("a/+/c", "a/b/c", true),
-	test_match("a/+/c", "a/+/+", undefined),
-	test_match("a/b/c", "a/+/+", true),
-	test_match("a/b/c/d", "a/+/+", false),
-
-	test_match("/a", "+/+", true),
-	test_match("/a", "/+", true),
-	test_match("/a", "+", false),
-
-	test_match("a", "#", true),
-	test_match("/a", "#", true),
-	test_match("a", "/#", false),
-	test_match("/a", "/#", true),
-
-	test_match("a/b/c", "a/b/#", true),
-	test_match("a/b", "a/b/#", true),
-	test_match("a/b/c", "a/#", true),
-	test_match("a/b/c", "a/+/#", true),
-
-	ok.
         
