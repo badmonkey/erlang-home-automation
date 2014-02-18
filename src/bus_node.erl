@@ -272,7 +272,11 @@ handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 			% process options
 			Topic = bus_topic:create_from_list(FullParts),
 			ListenTopic = bus_topic:create_from_list(tl(State#state.name)),
-			deliver_message( self(), Topic, Mesg, ListenTopic ),
+			_Count = sets:fold( fun(Target, Acc) ->
+					deliver_message( Target, Topic, Mesg, ListenTopic ),
+					Acc + 1
+				end,
+				0, State#state.listeners),
 			{ noreply, State }
 
 			
@@ -325,7 +329,7 @@ spread_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
 
 deliver_message(Pid, Topic, Mesg, Listen) ->
 	erlang:display( {"Endpoint", Pid, Topic, Mesg, Listen} ),
-	%Pid ! {},
+	%Pid ! { bus_message, Mesg },
 	ok.
 
 

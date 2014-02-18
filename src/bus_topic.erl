@@ -12,8 +12,8 @@
 
 is_valid_name(ID) ->
 	case re:run(ID, "^[a-zA-Z0-9_ ,%$!@<>()=:;.?|\-]+$") of 
-		{ match, _capture } -> true
-	;	_                   -> false
+		{ match, _capture }	-> true
+	;	_					-> false
 	end.
 
 
@@ -26,9 +26,9 @@ create( S ) ->
 
 		% handle empty strings and leading '/'
 	case SplitList of
-		[[]]    -> #bad_topic{ reason = "empty string passed as topic" }
-	;	[[]|T]  -> forward_topic_type( SplitList, implement_create(T) )
-	;	_       -> implement_create(SplitList)
+		[[]]	-> #bad_topic{ reason = "empty string passed as topic" }
+	;	[[]|T]	-> forward_topic_type( SplitList, implement_create(T) )
+	;	_		-> implement_create(SplitList)
 	end.
 
     
@@ -39,33 +39,33 @@ create( S ) ->
 create_from_list( L ) -> 
 	% handle empty strings and leading '/'
 	case L of
-		[]      -> #bad_topic{ reason = "empty list passed as topic" }
-	;	[[]]    -> #bad_topic{ reason = "empty list passed as topic" }
-	;	[[]|T]  -> forward_topic_type( L, implement_create(T) )
-	;	_       -> implement_create(L)
+		[]		-> #bad_topic{ reason = "empty list passed as topic" }
+	;	[[]]	-> #bad_topic{ reason = "empty list passed as topic" }
+	;	[[]|T]	-> forward_topic_type( L, implement_create(T) )
+	;	_		-> implement_create(L)
 	end.
 
 
 
-implement_create( [] )        -> #topic{ parts = [] };
-implement_create( [[]] )      -> #bad_topic{ reason = "topic is incomplete (ends with a '/')" };
-implement_create( ["#"] )     -> #wildcard_topic{ parts = ["#"] };
-implement_create( ["#"|_T] )  -> #bad_topic{ reason = "hash in middle of topic" };
+implement_create( [] )			-> #topic{ parts = [] };
+implement_create( [[]] )		-> #bad_topic{ reason = "topic is incomplete (ends with a '/')" };
+implement_create( ["#"] )		-> #wildcard_topic{ parts = ["#"] };
+implement_create( ["#"|_T] )	-> #bad_topic{ reason = "hash in middle of topic" };
 
 implement_create( ["+"|T] = Parts ) -> 
 	TailTopic = implement_create(T),
 	case TailTopic of
-		#topic{}              -> #wildcard_topic{ parts = Parts }
-	;	#wildcard_topic{}     -> #wildcard_topic{ parts = Parts }
-	;	_                     -> TailTopic
+		#topic{}			-> #wildcard_topic{ parts = Parts }
+	;	#wildcard_topic{}	-> #wildcard_topic{ parts = Parts }
+	;	_					-> TailTopic
 	end;
 
-implement_create( [[]|_T] )   -> #bad_topic{ reason = "empty part name (using '//' in topic)" };
+implement_create( [[]|_T] ) -> #bad_topic{ reason = "empty part name (using '//' in topic)" };
 
 implement_create( [H|T] = Parts ) ->
 	case is_valid_name(H) of
-		true  -> forward_topic_type(Parts, implement_create(T))
-	;	_     -> #bad_topic{ reason = "invalid part name" }
+		true	-> forward_topic_type(Parts, implement_create(T))
+	;	_		-> #bad_topic{ reason = "invalid part name" }
 	end.
 
 
@@ -75,9 +75,9 @@ implement_create( [H|T] = Parts ) ->
 
 forward_topic_type(Parts, Topic) ->
 	case Topic of
-		#topic{}          -> #topic{ parts = Parts }
-	;	#wildcard_topic{} -> #wildcard_topic{ parts = Parts }
-	;	_                 -> Topic
+		#topic{}			-> #topic{ parts = Parts }
+	;	#wildcard_topic{}	-> #wildcard_topic{ parts = Parts }
+	;	_					-> Topic
 	end.
 
     
@@ -91,22 +91,22 @@ match( #topic{ parts = Parts }, #wildcard_topic{ parts = Parts2 } ) ->
 	implement_match( Parts, Parts2 );
     
   % right types but in unusual order ... swap em and continue
-match( #wildcard_topic{ parts = Parts2 }, #topic{ parts = Parts } ) ->
-	implement_match( Parts, Parts2 );
+match( #wildcard_topic{ parts = Parts }, #topic{ parts = Parts2 } ) ->
+	implement_match( Parts2, Parts );
     
   % #wildcards can't match #wildcards (also handle all other cases)
 match( _, _ ) -> undefined.
 
 
 -spec implement_match( list( string() ), list( string() ) ) -> boolean().
-implement_match( [], [] )             -> true;
-implement_match( _, ["#"] )           -> true;
+implement_match( [], [] )				-> true;
+implement_match( _, ["#"] )				-> true;
 
-implement_match( [_H|T1], ["+"|T2] )  -> implement_match( T1, T2 );
+implement_match( [_H|T1], ["+"|T2] )	-> implement_match( T1, T2 );
 
-implement_match( [H|T1], [H|T2] )     -> implement_match( T1, T2 );
+implement_match( [H|T1], [H|T2] )		-> implement_match( T1, T2 );
 
-implement_match( _, _ )               -> false.
+implement_match( _, _ )					-> false.
 
 
 
@@ -124,6 +124,7 @@ to_string( #wildcard_topic{ parts = Parts } ) ->
 %% ------------------------------------------------------------------
 %% EUnit Definitions
 %% ------------------------------------------------------------------
+
 
 valid_names_test_() ->
 	[?_assertNot( is_valid_name("") ),
