@@ -133,7 +133,7 @@ init(_Args) ->
 		{ ok, Pid } 	->
 			% use Args param for startup 
 			% create /system/notify
-			% switch to mode_running
+			bus_node:set_running(Pid, Secret),
 			{ ok, #state{ secret = Secret, noderoot = Pid } }
 			
 	;	Other       	-> Other

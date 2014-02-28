@@ -30,7 +30,7 @@
 
 -export([start_link/0]).
 
--export([start_node/4, start_node/5]).
+-export([start_node/4, start_node/5, set_running/2]).
 -export([get_name/1]).
 -export([observe/5, forget/5, distribute/5]).
 
@@ -53,7 +53,7 @@ start_link() ->
 
 
 
-%%%%%%%%%% public create_node/4,5 %%%%%%%%%%
+%%%%%%%%%% start_node/4,5 %%%%%%%%%%
 -spec start_node( list( string() ), integer(), boolean(), bus_run_modes(), node_action() ) -> { ok, pid() } | { error, any() }.
 
 noop_action(S) -> { true, S }.
@@ -66,7 +66,24 @@ start_node(Name, Secret, Wildcard, Mode, CreateAction) ->
 
 
 
-%%%%%%%%%% public getmake_then/5 %%%%%%%%%%
+%%%%%%%%%% set_running/2 %%%%%%%%%%
+-spec set_running( pid(), integer() ) -> ok.
+
+set_running(Node, Secret) ->
+	forall_then(Node, Secret, fun(S) -> { ok, S#state{ run_mode = mode_running } } end ),
+	ok.
+
+
+
+%%%%%%%%%% forall_then/3 %%%%%%%%%%
+-spec forall_then( pid(), integer(), node_action() ) -> any().
+
+forall_then(Node, Secret, Action) ->
+	gen_server:call(Node, { call_forall_then, Secret, Action }).
+
+
+
+%%%%%%%%%% getmake_then/5 %%%%%%%%%%
 -spec getmake_then( pid(), integer(), list( string() ), node_action(), node_action() ) -> node_result_type().
 
 getmake_then(Node, Secret, Parts, FoundAction, CreateAction) ->
@@ -79,7 +96,7 @@ getmake_then(Node, Secret, Parts, FoundAction, CreateAction) ->
 
 
 
-%%%%%%%%%% public findnode_then/4 %%%%%%%%%%
+%%%%%%%%%% findnode_then/4 %%%%%%%%%%
 -spec findnode_then( pid(), integer(), list( string() ), node_action() ) -> node_result_type().
 
 findnode_then(Node, Secret, Parts, FoundAction) ->
@@ -167,14 +184,37 @@ init( { Name, Secret, Wildcard, Mode, CreateAction } ) ->
 	{ ok, NewState }.
 
 	
+	
+%%%%%%%%%% handle call_forall_then %%%%%%%%%%
+
+handle_call( { call_forall_then, Secret, Action }, _From, State) ->
+
+	case Secret =/= State#state.secret of
+		true	-> throw( { error, "Inconsistent trie (passed wrong secret)" } )
+	;	_		-> ok
+	end,
+	
+	{ Result, NewState } = Action(State),
+	
+	Children = dict:fold( fun(_K, V, Acc) ->
+			Acc ++ [ gen_server:call(V, { call_forall_then, Secret, Action } ) ]
+		end,
+		[],
+		NewState#state.children),
+	
+	{ reply,
+		{ string:join( NewState#state.name, "/" ), Result, Children },
+		NewState };
+
+
 
 %%%%%%%%%% handle call_get_name %%%%%%%%%%
 
 handle_call( { call_get_name }, _From, State) ->
 	{ reply, string:join( State#state.name, "/" ), State };
-	
+
     
-	
+
 %%%%%%%%%% handle default call %%%%%%%%%%
 
 handle_call(_Request, _From, State) ->
