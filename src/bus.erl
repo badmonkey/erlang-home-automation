@@ -18,7 +18,7 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0]).
+-export([start_link/1]).
 
 -export([subscribe/1, subscribe/2, unsubscribe/1, unsubscribe/2, publish/2, publish/3]).
 -export([topic_everything/0, topic_system/1, topic_process/2, topic_private/1]).
@@ -36,12 +36,12 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start_link() ->
-	gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Args) ->
+	gen_server:start_link({local, ?SERVER}, ?MODULE, Args, []).
 
 
 
--spec subscribe( string() | valid_topic_type(), proplists:proplist() ) -> ok | { error, string() }.
+-spec subscribe( string() | valid_topic_type(), proplists:proplist() ) -> return_type().
 % Options
 %   { send_hello, term() }
 
@@ -62,7 +62,7 @@ subscribe(TopicStr, Options) ->
     
 
     
--spec unsubscribe( string() | valid_topic_type(), proplists:proplist() ) -> ok | { error, string() }.
+-spec unsubscribe( string() | valid_topic_type(), proplists:proplist() ) -> return_type().
 % Options
 %   { send_goodbye, term() }
 
@@ -83,7 +83,7 @@ unsubscribe(TopicStr, Options) ->
 
 
 
--spec publish( string() | #topic{}, any(), proplists:proplist() ) -> ok | { error, string() }.
+-spec publish( string() | #topic{}, any(), proplists:proplist() ) -> return_type().
 % Options
 %   { retain }
 

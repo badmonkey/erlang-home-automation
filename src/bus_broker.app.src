@@ -4,10 +4,9 @@
   {vsn, "1"},
   {registered, []},
   {applications, [
-                  kernel,
-                  stdlib,
+                  kernel, stdlib,
                   inets, crypto, public_key, ssl
                  ]},
-  {mod, { bus_broker, []}},
+  {mod, { bus_broker, [] }},
   {env, []}
  ]}.

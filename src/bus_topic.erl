@@ -3,7 +3,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("bus.hrl").
 
--export([create/1, create_from_list/1, match/2, is_valid_name/1, to_string/1]).
+-export([create/1, create_from_list/1, topic_from_wildcard/1, match/2, is_valid_name/1, to_string/1]).
 
 
 
@@ -44,6 +44,14 @@ create_from_list( L ) ->
 	;	[[]|T]	-> forward_topic_type( L, implement_create(T) )
 	;	_		-> implement_create(L)
 	end.
+
+
+
+%%%%%%%%%% public topic_from_wildcard/1 %%%%%%%%%%
+-spec topic_from_wildcard( #wildcard_topic{} | list(string()) ) -> all_topics_type().
+
+topic_from_wildcard( #wildcard_topic{} = Topic ) ->
+	Topic.
 
 
 
@@ -170,6 +178,7 @@ create_topics_test_() ->
 	 ?_assertMatch( #wildcard_topic{}, create("a/+/c") ),
 	 ?_assertMatch( #wildcard_topic{}, create("a/+/+") ),
 	 ?_assertMatch( #wildcard_topic{}, create("a/b/#") ),
+	 ?_assertMatch( #topic{}, create("a/?/c") ),
 	 ?_assertMatch( #bad_topic{}, create("a/#/c") ),
 	 ?_assertMatch( #wildcard_topic{}, create("#") ),
 	 ?_assertMatch( #wildcard_topic{}, create("/#") ),

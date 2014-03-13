@@ -29,6 +29,17 @@ start_in_shell() ->
 %% ===================================================================
 
 init([]) ->
-	Bus = {bus, {bus, start_link, []}, permanent, brutal_kill, worker, [bus]},
-	{ok, { {one_for_one, 5, 10}, [Bus]} }.
+	Bus = {
+			bus,
+			{ bus, start_link, [] },
+			permanent, brutal_kill, worker,
+			[bus]
+		},
+		
+	{ 	ok,
+		{
+			{one_for_one, 5, 10},
+			[Bus]
+		 }
+	}.
 

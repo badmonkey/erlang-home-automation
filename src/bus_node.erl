@@ -14,13 +14,15 @@
 		secret :: integer(),
 		run_mode :: bus_run_modes(),
 		wildcard :: boolean(),
+		driver :: bus_driver_type(),
 		children :: dict(),
-		listeners :: set()
+		listeners :: set(),
+		stats_msg_out :: integer()
 	} ).
 
 
 -type node_action() :: fun( ( #state{} ) -> { any(), #state{} } ).
--type node_result_type() :: { ok, pid(), any() } | { notfound } | { error, any() }.
+-type find_return_type() :: { ok, pid(), any() } | { notfound } | { error, any() }.
 
 
 
@@ -31,8 +33,8 @@
 -export([start_link/0]).
 
 -export([start_node/4, start_node/5, set_running/2]).
--export([get_name/1]).
--export([observe/5, forget/5, distribute/5]).
+-export([get_name/1, match_topic/2]).
+-export([observe/5, forget/5, post/3, post/4, distribute/5]).
 
 
 %% ------------------------------------------------------------------
@@ -75,46 +77,20 @@ set_running(Node, Secret) ->
 
 
 
-%%%%%%%%%% forall_then/3 %%%%%%%%%%
--spec forall_then( pid(), integer(), node_action() ) -> any().
-
-forall_then(Node, Secret, Action) ->
-	gen_server:call(Node, { call_forall_then, Secret, Action }).
-
-
-
-%%%%%%%%%% getmake_then/5 %%%%%%%%%%
--spec getmake_then( pid(), integer(), list( string() ), node_action(), node_action() ) -> node_result_type().
-
-getmake_then(Node, Secret, Parts, FoundAction, CreateAction) ->
-	Token = random:uniform( 1 bsl 32 ),
-	gen_server:cast( Node, { getmake_then, self(), Secret, Parts, Token, FoundAction, CreateAction } ),
-	receive
-		{ getmake_reply, Token, Result }  -> Result
-
-	end.
-
-
-
-%%%%%%%%%% findnode_then/4 %%%%%%%%%%
--spec findnode_then( pid(), integer(), list( string() ), node_action() ) -> node_result_type().
-
-findnode_then(Node, Secret, Parts, FoundAction) ->
-	Token = random:uniform( 1 bsl 32 ),
-	gen_server:cast( Node, { findnode_then, self(), Secret, Parts, Token, FoundAction } ),
-	receive
-		{ findnode_reply, Token, Result }  -> Result
-
-	end.
-
-	
-
 %%%%%%%%%% public get_name/1 %%%%%%%%%%
 -spec get_name( pid() ) -> string().
 
 get_name(Node) ->
 	gen_server:call(Node, { call_get_name }).
-	
+
+
+
+%%%%%%%%%% public match_topic/2 %%%%%%%%%%
+-spec match_topic( pid(), #topic{} ) -> boolean().
+
+match_topic(Node, Topic) ->
+	gen_server:call(Node, { call_match_topic, Topic }).
+
 
 
 %%%%%%%%%% public observe/5 %%%%%%%%%%
@@ -126,6 +102,7 @@ observe(Node, Secret, Parts, AddWho, Hello) ->
 					add_observer(AddWho, AState)
 				end,
 				fun noop_action/1 ) of
+
 		{ ok, _NodePid, DidAdd } 	->
 			case DidAdd of
 				true	-> deliver_message( AddWho, bus:topic_private(AddWho), Hello, bus:topic_everything() )
@@ -157,9 +134,23 @@ forget(Node, Secret, Parts, ForgetWho, Goodbye) ->
 	;	{ error, Mesg }				-> { error, Mesg }
 	end.
 
-    
+
+
+%%%%%%%%%% public post/3, post/4 %%%%%%%%%%
+-spec post( pid(), #topic{}, any(), proplists:proplist() ) -> return_type().
+
+post(Node, Topic, Mesg) -> post(Node, Topic, Mesg, []).
+
+post(Node, Topic, Mesg, Options) ->
+	case match_topic(Node, Topic) of
+		true	-> gen_server:cast( Node, { node_post, Topic, Mesg, Options } )
+	;	_		-> { error, "Invalid topic for this node" }
+	end.
+
+
 
 %%%%%%%%%% public distribute/4 %%%%%%%%%%
+-spec distribute( pid(), integer(), list( string() ), any(), proplists:proplist() ) -> return_type().
 
 distribute(Node, Secret, Parts, Mesg, Options) ->
 	gen_server:cast( Node, { distribute, Secret, Parts, Parts, Mesg, Options } ).
@@ -203,7 +194,7 @@ handle_call( { call_forall_then, Secret, Action }, _From, State) ->
 		NewState#state.children),
 	
 	{ reply,
-		{ string:join( NewState#state.name, "/" ), Result, Children },
+		{ string:join( tl(NewState#state.name), "/" ), Result, Children },
 		NewState };
 
 
@@ -211,9 +202,16 @@ handle_call( { call_forall_then, Secret, Action }, _From, State) ->
 %%%%%%%%%% handle call_get_name %%%%%%%%%%
 
 handle_call( { call_get_name }, _From, State) ->
-	{ reply, string:join( State#state.name, "/" ), State };
+	{ reply, string:join( tl(State#state.name), "/" ), State };
+	
 
-    
+	
+%%%%%%%%%% handle call_match_topic %%%%%%%%%%
+
+handle_call( { call_match_topic, Topic }, _From, State) ->
+	{ reply, true, State };  %% todo
+
+
 
 %%%%%%%%%% handle default call %%%%%%%%%%
 
@@ -309,14 +307,8 @@ handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 	erlang:display( {"Visiting", State#state.name, self(), Mesg} ),
 	case Parts of
 		[]    ->
-			% process options
 			Topic = bus_topic:create_from_list(FullParts),
-			ListenTopic = bus_topic:create_from_list(tl(State#state.name)),
-			_Count = sets:fold( fun(Target, Acc) ->
-					deliver_message( Target, Topic, Mesg, ListenTopic ),
-					Acc + 1
-				end,
-				0, State#state.listeners),
+			gen_server:cast( self(), { node_post, Topic, Mesg, Options } ),
 			{ noreply, State }
 
 			
@@ -325,11 +317,26 @@ handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 				true  -> throw( { error, "Inconsistent trie (wildcard nodes cannot have children)" } )
 			;	_     -> ok
 			end,
-			spread_message(State, Secret, H, T, FullParts, Mesg, Options),
-			spread_message(State, Secret, "+", T, FullParts, Mesg, Options),
-			spread_message(State, Secret, "#", [], FullParts, Mesg, Options),
+			forward_message(State, Secret, H, T, FullParts, Mesg, Options),
+			forward_message(State, Secret, "+", T, FullParts, Mesg, Options),
+			forward_message(State, Secret, "#", [], FullParts, Mesg, Options),
 			{ noreply, State }
 	end;
+
+
+
+%%%%%%%%%% handle node_post %%%%%%%%%%
+
+handle_cast( { node_post, Topic, Mesg, Options }, State) ->
+	%% stuff with Options
+	ListenTopic = bus_topic:create_from_list(tl(State#state.name)),
+	Count = sets:fold( fun(Target, Acc) ->
+					deliver_message( Target, Topic, Mesg, ListenTopic ),
+					Acc + 1
+				end,
+				0, State#state.listeners )
+			+ State#state.stats_msg_out,
+	{ noreply, State#state{ stats_msg_out = Count } };
 
 
 
@@ -351,12 +358,49 @@ code_change(_OldVsn, State, _Extra) ->
 	{ok, State}.
 
 
+
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
 
-%%%%%%%%%% spread_message %%%%%%%%%%
-spread_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
+
+%%%%%%%%%% forall_then %%%%%%%%%%
+-spec forall_then( pid(), integer(), node_action() ) -> any().
+
+forall_then(Node, Secret, Action) ->
+	gen_server:call(Node, { call_forall_then, Secret, Action }).
+
+
+
+%%%%%%%%%% getmake_then %%%%%%%%%%
+-spec getmake_then( pid(), integer(), list( string() ), node_action(), node_action() ) -> find_return_type().
+
+getmake_then(Node, Secret, Parts, FoundAction, CreateAction) ->
+	Token = random:uniform( 1 bsl 32 ),
+	gen_server:cast( Node, { getmake_then, self(), Secret, Parts, Token, FoundAction, CreateAction } ),
+	receive
+		{ getmake_reply, Token, Result }  -> Result
+
+	end.
+
+
+
+%%%%%%%%%% findnode_then %%%%%%%%%%
+-spec findnode_then( pid(), integer(), list( string() ), node_action() ) -> find_return_type().
+
+findnode_then(Node, Secret, Parts, FoundAction) ->
+	Token = random:uniform( 1 bsl 32 ),
+	gen_server:cast( Node, { findnode_then, self(), Secret, Parts, Token, FoundAction } ),
+	receive
+		{ findnode_reply, Token, Result }  -> Result
+
+	end.
+
+
+
+%%%%%%%%%% forward_message %%%%%%%%%%
+
+forward_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
 	case dict:find(X, State#state.children) of
 		{ ok, [Node] }  -> gen_server:cast( Node, { distribute, Secret, Parts, FullParts, Mesg, Options } )
 	;	_               -> ok
@@ -367,8 +411,8 @@ spread_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
 %%%%%%%%%% deliver_message %%%%%%%%%%
 -spec deliver_message( pid(), #topic{}, any(), valid_topic_type() ) -> ok.
 
-deliver_message(Pid, Topic, Mesg, Listen) ->
-	erlang:display( {"Endpoint", Pid, Topic, Mesg, Listen} ),
+deliver_message(Target, Topic, Mesg, Listen) ->
+	erlang:display( {"Endpoint", Target, Topic, Mesg, Listen} ),
 	%Pid ! { bus_message, Mesg },
 	ok.
 
@@ -423,25 +467,42 @@ eunit_catch() ->
 create_tst_tree() ->
 	random:seed( now() ),
 	Secret = random:uniform( 1 bsl 32 ),
-	{ ok, Pid } = start_node( [[]], Secret, false, mode_startup ),
+	{ ok, RootPid } = start_node( [[]], Secret, false, mode_startup ),
 	CatchPid = spawn(?SERVER, eunit_catch, []),
 	?debugMsg("create new test tree"),
-	{ Pid, Secret, CatchPid }.
+	{ RootPid, Secret, CatchPid }.
 	
 
-
-basic_node_test_() ->
+node_test_() ->
+	{setup,
+	 fun() ->
+		{ RootPid, Secret, CatchPid } = create_tst_tree(),
+		Topic = "system/+/input",
+		ListenTopic = bus_topic:create(Topic),
+		{ ok, NodePid, _ } = getmake_then(RootPid, Secret, ListenTopic#wildcard_topic.parts, fun noop_action/1, fun noop_action/1),
+		{ RootPid, Secret, CatchPid, Topic, NodePid }
+	 end,
+	 fun( { RootPid, Secret, CatchPid, Topic, NodePid } ) ->
+		[?_assert( get_name(NodePid) =:= Topic ),
+		 ?_assert( match_topic(NodePid, bus_topic:create("system/eunit/input") ) ),
+		
+		 ?_assert( ( CatchPid ! terminate ) =:= terminate )
+		]
+	 end
+	}.
+	
+	
+observe_node_test_() ->
 	{setup,
 	 fun () -> create_tst_tree() end,
-	 fun( { Pid, Secret, CatchPid } ) ->
-		[?_assert( observe(Pid, Secret, ["test"], CatchPid, "Hello World") ),
-		 ?_assertNot( observe(Pid, Secret, ["test"], CatchPid, "Hello World") ),
-		 ?_assert( observe(Pid, Secret, ["test", "chan"], CatchPid, "Hello World") ),
-		 %?_assertThrow( {error, _S}, observe(Pid, Secret + 1, ["test"], CatchPid, "Hello World") ),
+	 fun( { RootPid, Secret, CatchPid } ) ->
+		[?_assert( observe(RootPid, Secret, ["test", "chan"], CatchPid, "Sent as hello #1") ),
+		 ?_assert( observe(RootPid, Secret, ["test"], CatchPid, "Sent as hello #2") ),
+		 ?_assertNot( observe(RootPid, Secret, ["test", "chan"], CatchPid, "Sent as hello #3") ),
+		 %?_assertThrow( {error, _S}, observe(RootPid, Secret + 1, ["test"], CatchPid, "Hello World") ),
 		 
 		 ?_assert( ( CatchPid ! terminate ) =:= terminate )
 		]
 	 end
 	}.
 
-	
