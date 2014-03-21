@@ -28,7 +28,7 @@ start_in_shell() ->
 %% Supervisor callbacks
 %% ===================================================================
 
-init([]) ->
+init(_Args) ->
 	Bus = {
 			bus,
 			{ bus, start_link, [] },

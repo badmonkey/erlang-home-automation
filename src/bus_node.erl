@@ -11,6 +11,7 @@
 -record(state,
 	{
 		name :: list(string()),
+		topic :: all_topics_type(),
 		secret :: integer(),
 		run_mode :: bus_run_modes(),
 		wildcard :: boolean(),
@@ -35,6 +36,7 @@
 -export([start_node/4, start_node/5, set_running/2]).
 -export([get_name/1, match_topic/2]).
 -export([observe/5, forget/5, post/3, post/4, distribute/5]).
+-export([get_stats/2]).
 
 
 %% ------------------------------------------------------------------
@@ -74,6 +76,14 @@ start_node(Name, Secret, Wildcard, Mode, CreateAction) ->
 set_running(Node, Secret) ->
 	forall_then(Node, Secret, fun(S) -> { ok, S#state{ run_mode = mode_running } } end ),
 	ok.
+
+
+
+%%%%%%%%% get_stats/2 %%%%%%%%%%
+-spec get_stats( pid(), integer() ) -> any().
+
+get_stats(Node, Secret) ->
+	forall_then(Node, Secret, fun(S) -> { { S#state.stats_msg_out }, S } end ).
 
 
 
@@ -123,6 +133,7 @@ forget(Node, Secret, Parts, ForgetWho, Goodbye) ->
 				fun(AState) ->
 					remove_observer(ForgetWho, AState)
 				end) of
+
 		{ ok, _NodePid, DidDel } 	->
 			case DidDel of
 				true	-> deliver_message( ForgetWho, bus:topic_private(ForgetWho), Goodbye, bus:topic_everything() )
@@ -163,15 +174,22 @@ distribute(Node, Secret, Parts, Mesg, Options) ->
 
 init( { Name, Secret, Wildcard, Mode, CreateAction } ) ->
 	erlang:display( {"NewNode", Name, self()} ),
+	Topic = case Name of
+				[]		-> undefined
+			;	[[]]	-> undefined
+			;	_		-> bus_topic:create_from_list( tl(Name) )
+			end,
 	{ _Ignore, NewState } = CreateAction(
 		#state{
 			name = Name,
+			topic = Topic,
 			secret = Secret,
 			run_mode = Mode,
 			wildcard = Wildcard,
 			children = dict:new(),
-			listeners = sets:new()
-		}),
+			listeners = sets:new(),
+			stats_msg_out = 0
+		} ),
 	{ ok, NewState }.
 
 	
@@ -186,30 +204,33 @@ handle_call( { call_forall_then, Secret, Action }, _From, State) ->
 	end,
 	
 	{ Result, NewState } = Action(State),
-	
-	Children = dict:fold( fun(_K, V, Acc) ->
+
+	Children = dict:fold( fun(_K, [V], Acc) ->
 			Acc ++ [ gen_server:call(V, { call_forall_then, Secret, Action } ) ]
 		end,
 		[],
 		NewState#state.children),
 	
-	{ reply,
-		{ string:join( tl(NewState#state.name), "/" ), Result, Children },
-		NewState };
+	case NewState#state.topic of
+		undefined	-> { reply, Children, NewState }
+	;	_			-> { reply,
+							{ bus_topic:to_string( tl(NewState#state.name) ), Result, Children },
+							NewState }
+	end;
 
 
 
 %%%%%%%%%% handle call_get_name %%%%%%%%%%
 
 handle_call( { call_get_name }, _From, State) ->
-	{ reply, string:join( tl(State#state.name), "/" ), State };
+	{ reply, bus_topic:to_string( tl(State#state.name) ), State };
 	
 
-	
+
 %%%%%%%%%% handle call_match_topic %%%%%%%%%%
 
 handle_call( { call_match_topic, Topic }, _From, State) ->
-	{ reply, true, State };  %% todo
+	{ reply, bus_topic:match(Topic, State#state.topic), State };
 
 
 
@@ -278,14 +299,14 @@ handle_cast( { findnode_then, ReplyWho, Secret, Parts, Token, FoundAction }, Sta
 	case Parts of
 		[]		->
 			ActionWho = self(),
-			{ Result, NextState } = FoundAction( ActionWho, State ),
+			{ Result, NextState } = FoundAction(State),
 			ReplyWho ! { findnode_reply, Token, { ok, ActionWho, Result } },
 			{ noreply, NextState }
 			
 	;	[H|T]	->
 			case dict:find(H, State#state.children) of
 				{ ok, [Node] }	->
-					gen_server:cast( Node, { findnode_reply, ReplyWho, Secret, T, Token, FoundAction } ),
+					gen_server:cast( Node, { findnode_then, ReplyWho, Secret, T, Token, FoundAction } ),
 					{ noreply, State }
 							
 			;	_				->
@@ -329,9 +350,8 @@ handle_cast( { distribute, Secret, Parts, FullParts, Mesg, Options }, State) ->
 
 handle_cast( { node_post, Topic, Mesg, Options }, State) ->
 	%% stuff with Options
-	ListenTopic = bus_topic:create_from_list(tl(State#state.name)),
 	Count = sets:fold( fun(Target, Acc) ->
-					deliver_message( Target, Topic, Mesg, ListenTopic ),
+					deliver_message( Target, Topic, Mesg, State#state.topic ),
 					Acc + 1
 				end,
 				0, State#state.listeners )
@@ -410,6 +430,8 @@ forward_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
 
 %%%%%%%%%% deliver_message %%%%%%%%%%
 -spec deliver_message( pid(), #topic{}, any(), valid_topic_type() ) -> ok.
+
+deliver_message(Target, Topic, undefined, Listen) -> ok;
 
 deliver_message(Target, Topic, Mesg, Listen) ->
 	erlang:display( {"Endpoint", Target, Topic, Mesg, Listen} ),

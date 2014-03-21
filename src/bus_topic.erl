@@ -119,7 +119,11 @@ implement_match( _, _ )					-> false.
 
 
 %%%%%%%%%% to_string/1 %%%%%%%%%%
--spec to_string( valid_topic_type() ) -> string().
+-spec to_string( list(string()) | valid_topic_type() ) -> string().
+
+to_string( [] ) -> "/";
+to_string( [[]] ) -> "/";
+to_string( L ) when is_list(L) -> string:join(L, "/" );
 
 to_string( #topic{ parts = Parts } ) ->
 	string:join( Parts, "/" );

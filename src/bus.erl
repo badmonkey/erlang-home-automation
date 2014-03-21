@@ -18,9 +18,10 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/1]).
+-export([start_link/0, start_link/1]).
 
 -export([subscribe/1, subscribe/2, unsubscribe/1, unsubscribe/2, publish/2, publish/3]).
+-export([stats/0]).
 -export([topic_everything/0, topic_system/1, topic_process/2, topic_private/1]).
 
 
@@ -36,6 +37,9 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
+start_link() ->
+	gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+	
 start_link(Args) ->
 	gen_server:start_link({local, ?SERVER}, ?MODULE, Args, []).
 
@@ -59,9 +63,9 @@ subscribe(TopicStr, Options) ->
 		#bad_topic{ reason = Reason }	-> { error, Reason }
 	;	_   -> gen_server:call(?SERVER, { subscribe, Topic, self(), Options })
 	end.
-    
 
-    
+
+
 -spec unsubscribe( string() | valid_topic_type(), proplists:proplist() ) -> return_type().
 % Options
 %   { send_goodbye, term() }
@@ -100,8 +104,14 @@ publish( TopicStr, Mesg, Options ) ->
 	end.
 
     
+    
+%%%%%%%%%% stats/0 %%%%%%%%%%
 
-%%%%% public standard topics %%%%%
+stats() ->
+	gen_server:call(?SERVER, { stats }).
+
+
+%%%%%%%%%% public standard topics %%%%%%%%%%
 
 -spec( topic_everything() -> #wildcard_topic{} ).
 topic_everything() -> #wildcard_topic{ parts = ["#"] }.
@@ -174,6 +184,12 @@ handle_call( { publish, #topic{ parts = Topic }, Mesg, Options }, _From, State )
 	bus_node:distribute(State#state.noderoot, State#state.secret, Topic, Mesg, Options),
 	{ reply, ok, State };
     
+    
+    
+handle_call( { stats }, _From, State ) ->
+	Result = bus_node:get_stats(State#state.noderoot, State#state.secret),
+	{ reply, Result, State };
+
 
 
 handle_call(_Request, _From, State) ->
