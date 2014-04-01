@@ -443,7 +443,7 @@ forward_message(State, Secret, X, Parts, FullParts, Mesg, Options) ->
 %%%%%%%%%% deliver_message %%%%%%%%%%
 -spec deliver_message( pid(), #topic{}, any(), valid_topic_type() ) -> ok.
 
-deliver_message(Target, Topic, undefined, Listen) -> ok;
+deliver_message(_Target, _Topic, undefined, _Listen) -> ok;
 
 deliver_message(Target, Topic, Mesg, Listen) ->
 	erlang:display( {"Endpoint", Target, Topic, Mesg, Listen} ),
