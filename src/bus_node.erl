@@ -207,11 +207,12 @@ handle_call( { call_forall_then, Secret, Action }, _From, State) ->
 	
 	{ Result, NewState } = Action(State),
 
-	Children = dict:fold( fun(_K, [V], Acc) ->
-			Acc ++ [ gen_server:call(V, { call_forall_then, Secret, Action } ) ]
+	RevChildren = dict:fold( fun(_K, [V], Acc) ->
+			[ gen_server:call(V, { call_forall_then, Secret, Action } ) | Acc]
 		end,
 		[],
 		NewState#state.children),
+	Children = lists:reverse(RevChildren),
 	
 	case NewState#state.topic of
 		undefined	-> { reply, Children, NewState }
