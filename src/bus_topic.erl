@@ -3,7 +3,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("bus.hrl").
 
--export([create/1, create_from_list/1, topic_from_wildcard/1, match/2, is_valid_name/1, to_string/1]).
+-export([create/1, create_from_list/1, topic_from_wildcard/1, match/2, is_valid_name/1, to_string/1, parent_topic/1]).
 
 
 
@@ -130,6 +130,10 @@ to_string( #topic{ parts = Parts } ) ->
 
 to_string( #wildcard_topic{ parts = Parts } ) ->
 	string:join( Parts, "/" ).
+
+
+-spec parent_topic( valid_topic_type() ) -> valid_topic_type().
+parent_topic(Topic) -> Topic.
 
 
 

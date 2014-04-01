@@ -117,18 +117,23 @@ stats() ->
 topic_everything() -> #wildcard_topic{ parts = ["#"] }.
 
 
-%  /system/Section
+%  /system/?Section
 -spec( topic_system( string() ) -> #topic{} ).
 topic_system(Section) -> #topic{ parts = [[], "system", Section] }.
 
 
-% /process/Pid/Section
+% /system/monitor/?Pid
+-spec( topic_monitor( pid() ) -> #topic{} ).
+topic_monitor(Pid) -> #topic{ parts = [[], "system", "monitor", io_lib:print(Pid)] }.
+
+
+% /process/?Pid/?Section
 -spec( topic_process( pid(), string() ) -> #topic{} ).
 topic_process(Pid, Section) -> #topic{ parts = [[], "process", io_lib:print(Pid), Section] }.
 
 
-% /process/Pid/private
-topic_private(Pid) -> #topic{ parts = [[], "process", io_lib:print(Pid), "private"] }.
+% /process/?Pid/private
+topic_private(Pid) -> topic_process(Pid, "private").
 
 
 

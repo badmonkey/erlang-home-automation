@@ -18,7 +18,8 @@
 		driver :: bus_driver_type(),
 		children :: dict(),
 		listeners :: set(),
-		stats_msg_out :: integer()
+		stats_msg_out :: integer(),
+		monitors :: dict()
 	} ).
 
 
@@ -188,7 +189,8 @@ init( { Name, Secret, Wildcard, Mode, CreateAction } ) ->
 			wildcard = Wildcard,
 			children = dict:new(),
 			listeners = sets:new(),
-			stats_msg_out = 0
+			stats_msg_out = 0,
+			monitors = dict:new()
 		} ),
 	{ ok, NewState }.
 
@@ -366,8 +368,18 @@ handle_cast(_Msg, State) ->
 	erlang:display( {"Ignoring cast", _Msg} ),
 	{noreply, State}.
 
-    
+
+
+%%%%%%%%%% handle {'DOWN'} %%%%%%%%%%
+handle_info({'DOWN', _Ref, process, Pid2, _Reason}, State) ->
+	{ _, NewState } = remove_observer(Pid2, State),
+	%% publish a DOWN message?
+	{noreply, NewState};
+
+
+%%%%%%%%%% handle default info %%%%%%%%%%
 handle_info(_Info, State) ->
+	erlang:display( {"Ignoring info", _Info} ),
 	{noreply, State}.
 
 
@@ -448,9 +460,11 @@ add_observer(AddWho, State) ->
 			{ false, State }
 					
 	;	_     ->
+			Ref = erlang:monitor(process, AddWho),
 			{ true,
 				State#state{
-					listeners = sets:add_element(AddWho, State#state.listeners)
+					listeners = sets:add_element(AddWho, State#state.listeners),
+					monitors = dict:append(AddWho, Ref, State#state.monitors)
 				}
 			}
 	end.
@@ -461,10 +475,15 @@ add_observer(AddWho, State) ->
 
 remove_observer(ForgetWho, State) ->
 	case sets:is_element(ForgetWho, State#state.listeners) of
-		true  -> 
+		true  ->
+			case dict:find(ForgetWho, State#state.monitors) of
+				{ ok, [Ref] }	-> erlang:demonitor(Ref)
+			;	_				-> ok
+			end,
 			{ true,
 				State#state{
-					listeners = sets:del_element(ForgetWho, State#state.listeners)
+					listeners = sets:del_element(ForgetWho, State#state.listeners),
+					monitors = dict:erase(ForgetWho, State#state.monitors)
 				}
 			}
 					
