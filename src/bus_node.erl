@@ -12,7 +12,7 @@
 	{
 		name :: list(string()),
 		topic :: all_topics_type(),
-		secret :: integer(),
+		secret :: reference(),
 		run_mode :: bus_run_modes(),
 		wildcard :: boolean(),
 		driver :: bus_driver_type(),
@@ -59,7 +59,7 @@ start_link() ->
 
 
 %%%%%%%%%% start_node/4,5 %%%%%%%%%%
--spec start_node( list( string() ), integer(), boolean(), bus_run_modes(), node_action() ) -> { ok, pid() } | { error, any() }.
+-spec start_node( list( string() ), reference(), boolean(), bus_run_modes(), node_action() ) -> { ok, pid() } | { error, any() }.
 
 noop_action(S) -> { true, S }.
 
@@ -72,7 +72,7 @@ start_node(Name, Secret, Wildcard, Mode, CreateAction) ->
 
 
 %%%%%%%%%% set_running/2 %%%%%%%%%%
--spec set_running( pid(), integer() ) -> ok.
+-spec set_running( pid(), reference() ) -> ok.
 
 set_running(Node, Secret) ->
 	forall_then(Node, Secret, fun(S) -> { ok, S#state{ run_mode = mode_running } } end ),
@@ -81,7 +81,7 @@ set_running(Node, Secret) ->
 
 
 %%%%%%%%% get_stats/2 %%%%%%%%%%
--spec get_stats( pid(), integer() ) -> any().
+-spec get_stats( pid(), reference() ) -> any().
 
 get_stats(Node, Secret) ->
 	forall_then(Node, Secret, fun(S) -> { { S#state.stats_msg_out }, S } end ).
@@ -105,7 +105,7 @@ match_topic(Node, Topic) ->
 
 
 %%%%%%%%%% public observe/5 %%%%%%%%%%
--spec observe( pid(), integer(), list( string() ), pid(), any() ) -> boolean() | { error, string() }.
+-spec observe( pid(), reference(), list( string() ), pid(), any() ) -> boolean() | { error, string() }.
 
 observe(Node, Secret, Parts, AddWho, Hello) ->
 	case getmake_then(Node, Secret, Parts,
@@ -127,7 +127,7 @@ observe(Node, Secret, Parts, AddWho, Hello) ->
 
 
 %%%%%%%%%% public forget/5 %%%%%%%%%%
--spec forget( pid(), integer(), list( string() ), pid(), any() ) -> boolean() | { error, string() }.
+-spec forget( pid(), reference(), list( string() ), pid(), any() ) -> boolean() | { error, string() }.
 
 forget(Node, Secret, Parts, ForgetWho, Goodbye) ->
 	case findnode_then(Node, Secret, Parts,
@@ -162,7 +162,7 @@ post(Node, Topic, Mesg, Options) ->
 
 
 %%%%%%%%%% public distribute/4 %%%%%%%%%%
--spec distribute( pid(), integer(), list( string() ), any(), proplists:proplist() ) -> return_type().
+-spec distribute( pid(), reference(), list( string() ), any(), proplists:proplist() ) -> return_type().
 
 distribute(Node, Secret, Parts, Mesg, Options) ->
 	gen_server:cast( Node, { distribute, Secret, Parts, Parts, Mesg, Options } ).
@@ -397,7 +397,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %%%%%%%%%% forall_then %%%%%%%%%%
--spec forall_then( pid(), integer(), node_action() ) -> any().
+-spec forall_then( pid(), reference(), node_action() ) -> any().
 
 forall_then(Node, Secret, Action) ->
 	gen_server:call(Node, { call_forall_then, Secret, Action }).
@@ -405,10 +405,10 @@ forall_then(Node, Secret, Action) ->
 
 
 %%%%%%%%%% getmake_then %%%%%%%%%%
--spec getmake_then( pid(), integer(), list( string() ), node_action(), node_action() ) -> find_return_type().
+-spec getmake_then( pid(), reference(), list( string() ), node_action(), node_action() ) -> find_return_type().
 
 getmake_then(Node, Secret, Parts, FoundAction, CreateAction) ->
-	Token = random:uniform( 1 bsl 32 ),
+	Token = make_ref(),
 	gen_server:cast( Node, { getmake_then, self(), Secret, Parts, Token, FoundAction, CreateAction } ),
 	receive
 		{ getmake_reply, Token, Result }  -> Result
@@ -418,10 +418,10 @@ getmake_then(Node, Secret, Parts, FoundAction, CreateAction) ->
 
 
 %%%%%%%%%% findnode_then %%%%%%%%%%
--spec findnode_then( pid(), integer(), list( string() ), node_action() ) -> find_return_type().
+-spec findnode_then( pid(), reference(), list( string() ), node_action() ) -> find_return_type().
 
 findnode_then(Node, Secret, Parts, FoundAction) ->
-	Token = random:uniform( 1 bsl 32 ),
+	Token = make_ref(),
 	gen_server:cast( Node, { findnode_then, self(), Secret, Parts, Token, FoundAction } ),
 	receive
 		{ findnode_reply, Token, Result }  -> Result
@@ -507,7 +507,7 @@ eunit_catch() ->
 
 create_tst_tree() ->
 	random:seed( now() ),
-	Secret = random:uniform( 1 bsl 32 ),
+	Secret = make_ref(),
 	{ ok, RootPid } = start_node( [[]], Secret, false, mode_startup ),
 	CatchPid = spawn(?SERVER, eunit_catch, []),
 	?debugMsg("create new test tree"),
@@ -540,7 +540,7 @@ observe_node_test_() ->
 		[?_assert( observe(RootPid, Secret, ["test", "chan"], CatchPid, "Sent as hello #1") ),
 		 ?_assert( observe(RootPid, Secret, ["test"], CatchPid, "Sent as hello #2") ),
 		 ?_assertNot( observe(RootPid, Secret, ["test", "chan"], CatchPid, "Sent as hello #3") ),
-		 %?_assertThrow( {error, _S}, observe(RootPid, Secret + 1, ["test"], CatchPid, "Hello World") ),
+		 %?_assertThrow( {error, _S}, observe(RootPid, make_ref(), ["test"], CatchPid, "Hello World") ),
 		 
 		 ?_assert( ( CatchPid ! terminate ) =:= terminate )
 		]

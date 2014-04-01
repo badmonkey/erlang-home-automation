@@ -9,7 +9,7 @@
 
 -record(state,
 	{
-		secret :: integer(),
+		secret :: reference(),
 		noderoot :: pid()
 	} ).
 
@@ -22,7 +22,7 @@
 
 -export([subscribe/1, subscribe/2, unsubscribe/1, unsubscribe/2, publish/2, publish/3]).
 -export([stats/0]).
--export([topic_everything/0, topic_system/1, topic_process/2, topic_private/1]).
+-export([topic_everything/0, topic_system/1, topic_process/2, topic_private/1, topic_monitor/1]).
 
 
 
@@ -143,7 +143,7 @@ topic_private(Pid) -> topic_process(Pid, "private").
 
 init(_Args) ->
 	random:seed( now() ),
-	Secret = random:uniform( 1 bsl 32 ),
+	Secret = make_ref(),
 	case bus_node:start_node( [[]], Secret, false, mode_startup ) of
 		{ ok, Pid } 	->
 			% use Args param for startup 
