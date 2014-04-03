@@ -33,13 +33,12 @@ init(_Args) ->
 			bus,
 			{ bus, start_link, [] },
 			permanent, brutal_kill, worker,
-			[bus]
+			[ bus ]
 		},
-		
-	{ 	ok,
+	{ ok,
 		{
-			{one_for_one, 5, 10},
+			{ one_for_one, 5, 10 },
 			[Bus]
-		 }
+		}
 	}.
 

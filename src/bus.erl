@@ -51,6 +51,8 @@ start_link(Args) ->
 
 subscribe(Topic) -> subscribe(Topic, []).
 
+%subscribe(Topic, Proxy) when is_function(Proxy) -> subscribe(Topic, Proxy, []).
+
 subscribe( #topic{} = Topic, Options) ->
 	gen_server:call(?SERVER, { subscribe, Topic, self(), Options });
     

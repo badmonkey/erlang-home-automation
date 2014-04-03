@@ -129,6 +129,9 @@ to_string( #topic{ parts = Parts } ) ->
 	string:join( Parts, "/" );
 
 to_string( #wildcard_topic{ parts = Parts } ) ->
+	string:join( Parts, "/" );
+	
+to_string(Parts) when is_list(Parts) ->
 	string:join( Parts, "/" ).
 
 
